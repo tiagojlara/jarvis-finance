@@ -15,7 +15,7 @@ export function DataTable({ columns, rows, empty, onDelete, onEdit }) {
   if (!rows.length) return <Empty>{empty}</Empty>;
   return <div className="table-scroll"><table><thead><tr>{columns.map((c) => <th key={c.key}>{c.label}</th>)}{(onDelete || onEdit) && <th/>}</tr></thead><tbody>{rows.map((row) => <tr key={row.id}>{columns.map((c) => <td key={c.key}>{c.render ? c.render(row) : row[c.key]}</td>)}{(onDelete || onEdit) && <td className="text-right">{onEdit && <button className="text-action" onClick={() => onEdit(row)}>Edit</button>}{onDelete && <button className="text-action danger" onClick={() => onDelete(row)}>Remove</button>}</td>}</tr>)}</tbody></table></div>;
 }
-export function Overview({ data, homeValue, settings, navigate, onHomeCurrency }) {
+export function Overview({ data, homeValue, settings, navigate }) {
   const [period, setPeriod] = useState('1Y');
   const income = Object.entries(data.summary.dividendIncomeByCurrency || {}).map(([currency, amount]) => money(amount, currency)).join(' · ') || '—';
   const investmentValue = getHomeValue(data.summary.holdings.filter((holding) => !holding.is_cash_balance), data.fx_rates, settings.homeCurrency);
@@ -67,7 +67,7 @@ export function Overview({ data, homeValue, settings, navigate, onHomeCurrency }
     <Metric label="UNREALIZED ROI" value={roi === null ? '—' : `${roi >= 0 ? '+' : ''}${roi.toFixed(2)}%`} tone={roi === null ? '' : roi >= 0 ? 'text-positive' : 'text-negative'} detail="Gain ÷ cost basis · excludes cash and realized gains"/>
     <Metric label="DIVIDENDS RECEIVED" value={income} detail={<button className="text-action" onClick={() => navigate('dividends')}>View dividend history →</button>}/>
   </div>
-    <div className="content-grid content-grid-main"><Section title={`Portfolio value history · ${settings.homeCurrency}`} action={<select aria-label="Overview currency" value={settings.homeCurrency} onChange={(event) => onHomeCurrency(event.target.value)}>{currencies.map((currency) => <option key={currency}>{currency}</option>)}</select>}>
+    <div className="content-grid content-grid-main"><Section title={`Portfolio value history · ${settings.homeCurrency}`}>
       <div className="period-controls" role="group" aria-label="Portfolio history period">{periods.map((option) => <button type="button" key={option} aria-pressed={period === option} className={period === option ? 'period-button selected' : 'period-button'} onClick={() => setPeriod(option)}>{option === '30D' ? '1M' : option === '90D' ? '3M' : option === '180D' ? '6M' : option === 'ALL' ? 'All' : option}</button>)}</div>
       <p className="panel-note">Historical holdings and cash balances converted using rates available on each date. Period change is not adjusted for contributions or withdrawals.</p>
       <PortfolioValueChart data={periodHistory} currency={settings.homeCurrency}/>

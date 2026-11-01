@@ -1,16 +1,37 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { api, escapeCsv, getHomeValue } from './api.js';
+import { api, currencies, escapeCsv, getHomeValue } from './api.js';
 import Sidebar from './components/Sidebar.jsx';
 import Modal from './components/Modal.jsx';
 import { Activity, Dividends, NetWorth, Overview, Planning, Portfolio, Settings } from './components/Views.jsx';
 
 const initialSettings = { homeCurrency: 'EUR', fxProvider: 'frankfurter', currentAge: 35, retirementAge: 65, monthlyContribution: 500, monthlyIncome: 2500, oneTimeContribution: 0, monthlyWithdrawal: 0, inflation: .02, scenarios: [.03, .05, .07] };
 const titles = { overview: 'Overview', portfolio: 'Portfolio', networth: 'Net worth', activity: 'Activity', dividends: 'Dividends', planning: 'Retirement plan', settings: 'Settings & backup' };
+const routes = ['overview', 'portfolio', 'networth', 'activity', 'dividends', 'planning', 'settings'];
+const pathFor = (page) => (page === 'overview' ? '/' : `/${page}`);
+const pageFromLocation = () => {
+  const slug = window.location.pathname.split('/')[1] || '';
+  return routes.includes(slug) ? slug : 'overview';
+};
 const emptyData = { accounts: [], assets: [], transactions: [], prices: [], dividends: [], cash_balances: [], physical_assets: [], physical_valuations: [], liabilities: [], liability_balances: [], fx_rates: [], summary: { holdings: [], valueByCurrency: {}, costByCurrency: {}, dividendIncomeByCurrency: {} } };
 
 export default function App() {
-  const [page, setPage] = useState('overview'); const [data, setData] = useState(emptyData); const [settings, setSettings] = useState(initialSettings);
+  const [page, setPage] = useState(pageFromLocation); const [data, setData] = useState(emptyData); const [settings, setSettings] = useState(initialSettings);
   const [modal, setModal] = useState(null); const [editing, setEditing] = useState(null); const [busy, setBusy] = useState(true); const [error, setError] = useState('');
+  const navigate = useCallback((next) => {
+    if (!routes.includes(next)) return;
+    if (window.location.pathname !== pathFor(next)) window.history.pushState({ page: next }, '', pathFor(next));
+    setPage(next);
+  }, []);
+  useEffect(() => {
+    const onPop = () => setPage(pageFromLocation());
+    window.addEventListener('popstate', onPop);
+    return () => window.removeEventListener('popstate', onPop);
+  }, []);
+  useEffect(() => {
+    document.title = `Northstar · ${titles[page]}`;
+    // Normalize any unknown deep link (e.g. /anything) back to the page we actually render.
+    if (window.location.pathname !== pathFor(page)) window.history.replaceState({ page }, '', pathFor(page));
+  }, [page]);
   const refresh = useCallback(async () => {
     try {
       const [summary, accounts, assets, transactions, prices, dividends, cash_balances, physical_assets, physical_valuations, liabilities, liability_balances, fx_rates, saved] = await Promise.all([
@@ -29,10 +50,10 @@ export default function App() {
   useEffect(() => { refresh(); }, [refresh]);
   const homeValue = useMemo(() => getHomeValue(data.summary.holdings, data.fx_rates, settings.homeCurrency), [data, settings.homeCurrency]);
   const addRecord = (type) => {
-    if (!['account', 'asset', 'physicalAsset', 'liability'].includes(type) && data.accounts.length === 0 && !['valuation', 'liabilityBalance'].includes(type)) { setError(''); setPage('portfolio'); setEditing(null); setModal('account'); return; }
-    if (['price', 'dividend'].includes(type) && data.assets.length === 0) { setError(''); setPage('portfolio'); setEditing(null); setModal('asset'); return; }
-    if (type === 'valuation' && data.physical_assets.length === 0) { setError(''); setPage('networth'); setEditing(null); setModal('physicalAsset'); return; }
-    if (type === 'liabilityBalance' && data.liabilities.length === 0) { setError(''); setPage('networth'); setEditing(null); setModal('liability'); return; }
+    if (!['account', 'asset', 'physicalAsset', 'liability'].includes(type) && data.accounts.length === 0 && !['valuation', 'liabilityBalance'].includes(type)) { setError(''); navigate('portfolio'); setEditing(null); setModal('account'); return; }
+    if (['price', 'dividend'].includes(type) && data.assets.length === 0) { setError(''); navigate('portfolio'); setEditing(null); setModal('asset'); return; }
+    if (type === 'valuation' && data.physical_assets.length === 0) { setError(''); navigate('networth'); setEditing(null); setModal('physicalAsset'); return; }
+    if (type === 'liabilityBalance' && data.liabilities.length === 0) { setError(''); navigate('networth'); setEditing(null); setModal('liability'); return; }
     setError(''); setEditing(null); setModal(type);
   };
   const editRecord = (type, record) => { setError(''); setEditing(record); setModal(type); };
@@ -67,7 +88,7 @@ export default function App() {
     finally { event.target.value = ''; }
   };
   const content = {
-    overview: <Overview data={data} homeValue={homeValue} settings={settings} navigate={setPage} onHomeCurrency={(homeCurrency) => updateSettings({ homeCurrency })}/>,
+    overview: <Overview data={data} homeValue={homeValue} settings={settings} navigate={navigate}/>,
     portfolio: <Portfolio data={data} onAdd={addRecord} onDelete={deleteRecord} onEdit={editRecord}/>,
     networth: <NetWorth data={data} settings={settings} homeValue={homeValue} onAdd={addRecord} onDelete={deleteRecord} onEdit={editRecord}/>,
     activity: <Activity data={data} onAdd={addRecord} onDelete={deleteRecord}/>,
@@ -75,7 +96,7 @@ export default function App() {
     planning: <Planning settings={settings} setSettings={updateSettings} homeValue={homeValue}/>,
     settings: <Settings data={data} settings={settings} onHomeCurrency={updateSettings} onDelete={deleteRecord} onRefresh={refresh}/>,
   };
-  return <div className="app-shell min-h-screen"><Sidebar page={page} navigate={setPage}/><main className="main-content"><header className="topbar flex items-center justify-between"><div><div className="eyebrow">PERSONAL WEALTH</div><h1>{titles[page]}</h1></div><div className="topbar-actions"><button className="button button-quiet desktop-button" onClick={exportCsv}>Export CSV</button><button className="button button-primary" onClick={() => addRecord('transaction')}>＋ Add activity</button></div></header>
+  return <div className="app-shell min-h-screen"><Sidebar page={page} navigate={navigate}/><main className="main-content"><header className="topbar flex items-center justify-between"><div><div className="eyebrow">PERSONAL WEALTH</div><h1>{titles[page]}</h1></div><div className="topbar-actions"><label className="topbar-currency" title="Home currency for totals, charts, and planning"><span>HOME</span><select aria-label="Home currency" value={settings.homeCurrency} onChange={(event) => updateSettings({ homeCurrency: event.target.value })}>{currencies.map((c) => <option key={c}>{c}</option>)}</select></label><button className="button button-quiet desktop-button" onClick={exportCsv}>Export CSV</button><button className="button button-primary" onClick={() => addRecord('transaction')}>＋ Add activity</button></div></header>
     <div className="notice"><span>✳</span> Planning tool only · Estimates are uncertain and are not financial advice.</div>
     {error && <div className="error-banner" role="status"><span>{error}</span><button onClick={() => setError('')} aria-label="Dismiss">×</button></div>}
     {busy ? <div className="loading-state">Opening your local portfolio…</div> : content[page]}
