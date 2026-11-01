@@ -1,0 +1,33 @@
+{
+  "name": "pocket-retirement",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Local-first personal portfolio and retirement planner",
+  "engines": {
+    "node": ">=20.19.0"
+  },
+  "scripts": {
+    "start": "node server.js",
+    "dev": "concurrently -k \"node server.js\" \"vite --host 127.0.0.1\"",
+    "build": "vite build",
+    "test": "node --test"
+  },
+  "dependencies": {
+    "better-sqlite3": "^13.0.3",
+    "express": "^4.21.2",
+    "react": "^19.1.0",
+    "react-dom": "^19.1.0"
+  },
+  "devDependencies": {
+    "@tailwindcss/vite": "^4.1.0",
+    "@vitejs/plugin-react": "^5.0.0",
+    "concurrently": "^9.1.2",
+    "tailwindcss": "^4.1.0",
+    "vite": "^7.1.0"
+  },
+  "allowScripts": {
+    "better-sqlite3@13.0.3": true,
+    "esbuild@0.28.2": true,
+    "fsevents@2.3.3": true
+  }
+}
