@@ -278,6 +278,34 @@ test('dated quote fetch can fill past prices for assets that are no longer held'
   assert.equal((await request('market-data/quote?assetId=999&date=2024-03-20')).status, 404);
 });
 
+test('fund NAV import upserts dated prices and never touches manual entries', async (t) => {
+  const { request, close } = await startServer();
+  t.after(close);
+  const { assetId } = await seedAccountAndAsset(request);
+  await request('prices', { method: 'POST', body: { asset_id: assetId, date: '2026-01-02', price: 111, currency: 'EUR', source: 'Manual' } });
+
+  const result = await request('prices/import', { method: 'POST', body: { assetId, prices: [
+    { date: '2026-01-02', price: 999 }, // same date as the manual entry: must be kept out
+    { date: '2026-01-05', price: 125 },
+    { date: 'not-a-date', price: 1 },
+    { date: '2026-01-06', price: -5 },
+  ] } });
+  assert.equal(result.status, 200, result.payload?.error);
+  assert.deepEqual(
+    { stored: result.payload.stored, manualKept: result.payload.manualKept, rejected: result.payload.rejected },
+    { stored: 1, manualKept: 1, rejected: 2 },
+  );
+
+  const prices = (await request('prices')).payload;
+  assert.equal(prices.find((p) => p.date === '2026-01-02').price, 111, 'manual price survives the import');
+  const imported = prices.find((p) => p.date === '2026-01-05');
+  assert.equal(imported.price, 125);
+  assert.equal(imported.currency, 'EUR', 'imports adopt the asset currency regardless of the file');
+  assert.match(imported.source, /Avanza/);
+
+  assert.equal((await request('prices/import', { method: 'POST', body: { assetId: 999, prices: [{ date: '2026-01-05', price: 1 }] } })).status, 404);
+});
+
 test('backup and restore round-trips without foreign key errors', async (t) => {
   const { request, close } = await startServer();
   t.after(close);

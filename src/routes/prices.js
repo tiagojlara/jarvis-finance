@@ -122,6 +122,40 @@ function createPricesRouter({
     }
   });
 
+  // Bulk import of dated fund NAVs (e.g. the CSV downloaded from an Avanza fund page).
+  // Mutual funds are out of reach for the stock providers; this path needs no provider and
+  // no quota. Manual prices for the same date always win; existing provider rows get updated.
+  router.post('/api/prices/import', (req, res) => {
+    const assetId = Number(req.body?.assetId);
+    const asset = db.prepare('SELECT currency FROM assets WHERE id=?').get(assetId);
+    if (!asset) return res.status(404).json({ error: 'Choose an existing asset to import into.' });
+    const incoming = Array.isArray(req.body?.prices) ? req.body.prices : null;
+    if (!incoming?.length) return res.status(400).json({ error: 'Nothing to import. Load a CSV with dated values first.' });
+    if (incoming.length > 15000) return res.status(400).json({ error: 'Import too large (max 15000 rows).' });
+    const source = 'Avanza · NAV';
+    const findManual = db.prepare("SELECT id FROM prices WHERE asset_id=? AND date=? AND source='Manual' LIMIT 1");
+    const findProvider = db.prepare("SELECT id FROM prices WHERE asset_id=? AND date=? AND source!='Manual' LIMIT 1");
+    const update = db.prepare('UPDATE prices SET price=@price,currency=@currency,source=@source WHERE id=@id');
+    const insert = db.prepare('INSERT INTO prices(asset_id,date,price,currency,source) VALUES(@asset_id,@date,@price,@currency,@source)');
+    let stored = 0;
+    let manualKept = 0;
+    let rejected = 0;
+    const run = db.transaction(() => {
+      for (const row of incoming) {
+        const price = Number(row?.price);
+        const date = String(row?.date || '');
+        if (!(price > 0) || !/^\d{4}-\d{2}-\d{2}$/.test(date)) { rejected += 1; continue; }
+        if (findManual.get(assetId, date)) { manualKept += 1; continue; }
+        const existing = findProvider.get(assetId, date);
+        if (existing) update.run({ price, currency: asset.currency, source, id: existing.id });
+        else insert.run({ asset_id: assetId, date, price, currency: asset.currency, source });
+        stored += 1;
+      }
+    });
+    run();
+    res.json({ ok: true, stored, manualKept, rejected, source });
+  });
+
   router.post('/api/prices/sync', async (req, res) => {
     const provider = activeProvider();
     if (!['marketstack', 'alphavantage'].includes(provider)) return res.status(400).json({ error: 'Configured market-data provider is not supported.' });
