@@ -11,5 +11,5 @@ function summarize({accounts,assets,transactions,prices,dividends}) {
   const divByCurrency={};for(const d of dividends)divByCurrency[d.currency]=(divByCurrency[d.currency]||0)+Number(d.amount);
   return {holdings:rows,valueByCurrency,costByCurrency,dividendIncomeByCurrency:divByCurrency,totalAssets:rows.length,accountCount:accounts.length};
 }
-function project({startingValue,monthlyContribution,annualReturn,inflation,years,withdrawal=0}){let v=Number(startingValue),out=[];for(let y=0;y<=years;y++){out.push({year:y,value:v,realValue:v/Math.pow(1+inflation,y)});for(let m=0;m<12;m++)v=v*(1+annualReturn)**(1/12)+Number(monthlyContribution)-Number(withdrawal);}return out;}
-module.exports={summarize,project};
+// Retirement projection lives in src/projection.mjs (shared with the browser and tests).
+module.exports={summarize};
