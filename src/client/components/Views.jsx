@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { AllocationBar, DividendChart, PortfolioValueChart, ScenarioChart } from './Charts.jsx';
+import { DividendChart, PortfolioValueChart, ScenarioChart } from './Charts.jsx';
 import { api, convertRate, currencies, getHomeValue, money, today } from '../api.js';
 import { parsePriceHistory } from '../price-import.mjs';
 import { periodReturn, portfolioHistory, roiPercent } from '../history.mjs';
@@ -50,7 +50,6 @@ export function Overview({ data, homeValue, settings, navigate }) {
   const first = periodHistory[0]; const last = periodHistory.at(-1);
   const periodChange = periodReturn(periodHistory);
   const currencyEntries = Object.entries(data.summary.valueByCurrency || {});
-  const typeEntries = data.summary.holdings.reduce((out, holding) => { if (holding.current_value == null) return out; out[holding.currency] ||= {}; out[holding.currency][holding.type] = (out[holding.currency][holding.type] || 0) + holding.current_value; return out; }, {});
   const accountValues = {};
   for (const holding of data.summary.holdings) {
     if (holding.is_cash_balance) {
@@ -85,7 +84,7 @@ export function Overview({ data, homeValue, settings, navigate }) {
       <p className="panel-note">Historical holdings and cash balances converted using rates available on each date. Period change is not adjusted for contributions or withdrawals.</p>
       <PortfolioValueChart data={periodHistory} currency={settings.homeCurrency}/>
       <div className="history-footer">{first && last && <span>{first.date} → {last.date}</span>}{periodChange !== null && <b className={periodChange >= 0 ? 'text-positive' : 'text-negative'}>{periodChange >= 0 ? '+' : ''}{periodChange.toFixed(2)}% period change</b>}</div>
-    </Section><Section title="Portfolio allocation"><div className="allocation-currency">{currencyEntries.map(([currency, amount]) => <div className="allocation-row" key={currency}><span>{currency}</span><b>{money(amount, currency)}</b></div>)}{!currencyEntries.length && <Empty>Add an asset and a manual price to see allocation.</Empty>}</div><div className="divider"/><h3 className="subheading">By asset type · within each currency</h3>{Object.entries(typeEntries).map(([currency, types]) => <div key={currency}><div className="panel-note">{currency}</div><AllocationBar entries={Object.entries(types)}/></div>)}<div className="divider"/><h3 className="subheading">By account · original currencies</h3>{Object.entries(accountValues).map(([label, amount]) => <div className="allocation-row" key={label}><span>{label}</span><b>{money(amount, label.split(' · ').at(-1))}</b></div>)}{!Object.keys(accountValues).length && <p className="panel-note">Account allocation appears after holdings or cash balances are entered.</p>}</Section></div>
+    </Section><Section title="Portfolio allocation"><div className="allocation-currency">{currencyEntries.map(([currency, amount]) => <div className="allocation-row" key={currency}><span>{currency}</span><b>{money(amount, currency)}</b></div>)}{!currencyEntries.length && <Empty>Add an asset and a manual price to see allocation.</Empty>}</div><div className="divider"/><h3 className="subheading">By account · original currencies</h3>{Object.entries(accountValues).map(([label, amount]) => <div className="allocation-row" key={label}><span>{label}</span><b>{money(amount, label.split(' · ').at(-1))}</b></div>)}{!Object.keys(accountValues).length && <p className="panel-note">Account allocation appears after holdings or cash balances are entered.</p>}</Section></div>
     <Section title="Your holdings" action={<button className="text-action" onClick={() => navigate('portfolio')}>View portfolio <span aria-hidden>→</span></button>}><HoldingsTable holdings={data.summary.holdings.filter((holding) => holding.quantity > 0).slice(0, 6)}/></Section>
   </>;
 }
