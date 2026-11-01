@@ -56,13 +56,14 @@ function pickLatestOnOrBefore(series, date) {
 // back to the free weekly series (~2 years). Each weekly key is that week's last trading
 // day, so the fallback is still a real close on or before the date — just Friday's, not
 // the exact day's. gate() and pace() let the caller meter and space every provider call.
+const quotaError = () => {
+  const error = new Error('Alpha Vantage daily request limit reached. Try again tomorrow.');
+  error.status = 429;
+  error.publicMessage = error.message;
+  return error;
+};
+
 async function fetchPriceOnDate(symbol, date, apiKey, { gate = () => true, pace = async () => {} } = {}) {
-  const quotaError = () => {
-    const error = new Error('Alpha Vantage daily request limit reached. Try again tomorrow.');
-    error.status = 429;
-    error.publicMessage = error.message;
-    return error;
-  };
   if (!gate()) throw quotaError();
   await pace();
   const daily = await request({ function: 'TIME_SERIES_DAILY', symbol, outputsize: 'compact' }, apiKey);
@@ -73,6 +74,21 @@ async function fetchPriceOnDate(symbol, date, apiKey, { gate = () => true, pace 
   const weekly = await request({ function: 'TIME_SERIES_WEEKLY', symbol }, apiKey);
   const approx = pickLatestOnOrBefore(weekly['Weekly Time Series'], date);
   return approx ? { symbol, ...approx, exact: false } : null;
+}
+
+// One-call history backfill: TIME_SERIES_WEEKLY is the longest series the free tier
+// returns in a single request (~100 weekly closes, roughly two years). Every key is
+// that week's last trading day, so each point is a real close — the same fallback the
+// dated fetch labels as a weekly close. Points come back ascending as { date, close }.
+async function fetchWeeklyHistory(symbol, apiKey, { gate = () => true, pace = async () => {} } = {}) {
+  if (!gate()) throw quotaError();
+  await pace();
+  const payload = await request({ function: 'TIME_SERIES_WEEKLY', symbol }, apiKey);
+  const series = payload['Weekly Time Series'] || {};
+  return Object.keys(series)
+    .sort()
+    .map((date) => ({ date, close: Number(series[date]['4. close']) }))
+    .filter((point) => point.close > 0);
 }
 
 async function searchSymbols(keywords, apiKey) {
@@ -87,4 +103,4 @@ async function searchSymbols(keywords, apiKey) {
   })).filter((match) => match.symbol);
 }
 
-module.exports = { fetchLatestPrice, fetchPriceOnDate, searchSymbols };
+module.exports = { fetchLatestPrice, fetchPriceOnDate, fetchWeeklyHistory, searchSymbols };

@@ -5,6 +5,8 @@ const { isHeld } = require('./portfolio');
 
 const ALPHA_VANTAGE_DAILY_LIMIT = 25;
 const ALPHA_VANTAGE_MIN_INTERVAL_MS = 12000;
+// Backfill stores at most this much history per asset, even if the provider returns more.
+const MAX_BACKFILL_YEARS = 3;
 
 // Ticker fallback is shared by both providers: a plain equity-style ticker, never an ISIN.
 const tickerFallback = (asset) => (
@@ -18,6 +20,7 @@ function createPricesRouter({
   fetchLatestPrices = marketstack.fetchLatestPrices,
   fetchLatestAlphaPrice = alphavantage.fetchLatestPrice,
   fetchAlphaPriceOnDate = alphavantage.fetchPriceOnDate,
+  fetchAlphaWeeklyHistory = alphavantage.fetchWeeklyHistory,
   searchAlphaSymbols = alphavantage.searchSymbols,
 } = {}) {
   const router = express.Router();
@@ -154,6 +157,88 @@ function createPricesRouter({
     });
     run();
     res.json({ ok: true, stored, manualKept, rejected, source });
+  });
+
+  // History backfill: ONE TIME_SERIES_WEEKLY call per asset stores up to 3 years of
+  // dated weekly closes (the free tier serves ~100 weeks per call, about two years).
+  // Like the full sync, the default run only spends the allowance on assets with open
+  // positions; explicitly requested assetIds are honored as-is so a sold asset's
+  // history can still be repaired. Manual prices are never overwritten; existing
+  // provider rows for the same date are updated in place.
+  router.post('/api/prices/backfill', async (req, res) => {
+    if (activeProvider() !== 'alphavantage') return res.status(400).json({ error: 'History backfill needs Alpha Vantage; Marketstack serves latest prices only.' });
+    const key = alphaKey();
+    if (!key) return res.status(400).json({ error: 'Alpha Vantage is not configured. Add ALPHA_VANTAGE_API_KEY to the local .env file and restart the app.' });
+    const requestedIds = Array.isArray(req.body?.assetIds) ? [...new Set(req.body.assetIds.map(Number).filter(Number.isInteger))] : null;
+    if (requestedIds && (!requestedIds.length || requestedIds.length > ALPHA_VANTAGE_DAILY_LIMIT)) return res.status(400).json({ error: `Choose between 1 and ${ALPHA_VANTAGE_DAILY_LIMIT} assets to backfill.` });
+    const allAssets = requestedIds
+      ? db.prepare(`SELECT * FROM assets WHERE id IN (${requestedIds.map(() => '?').join(',')})`).all(...requestedIds)
+      : db.prepare('SELECT * FROM assets ORDER BY id').all();
+    const openAssets = requestedIds ? allAssets : allAssets.filter((asset) => isHeld(db, asset.id));
+    const noPositionSkipped = allAssets.length - openAssets.length;
+    // The weekly payload carries no currency, so assets whose provider quote currency
+    // differs from their record currency cannot be stored safely (same guard as the sync).
+    const currencySkipped = openAssets.filter((asset) => alphaSymbolFor(asset) && (asset.alphavantage_currency || asset.currency) !== asset.currency).map((asset) => asset.name);
+    const targets = openAssets.filter((asset) => alphaSymbolFor(asset) && (asset.alphavantage_currency || asset.currency) === asset.currency);
+    if (!targets.length) {
+      return res.json({
+        ok: true, results: [], noPositionSkipped, skippedCurrency: currencySkipped, quotaSkipped: 0,
+        message: `Nothing to backfill: no eligible asset has a usable Alpha Vantage symbol${noPositionSkipped ? ` (${noPositionSkipped} asset${noPositionSkipped === 1 ? '' : 's'} with no open position skipped)` : ''}.`,
+      });
+    }
+    const allowance = Math.max(0, ALPHA_VANTAGE_DAILY_LIMIT - alphaRequestsToday());
+    const selected = targets.slice(0, allowance);
+    const quotaSkipped = targets.length - selected.length;
+    const cutoff = (() => { const d = new Date(); d.setFullYear(d.getFullYear() - MAX_BACKFILL_YEARS); return d.toISOString().slice(0, 10); })();
+    const source = 'Alpha Vantage · weekly close';
+    const findManual = db.prepare("SELECT id FROM prices WHERE asset_id=? AND date=? AND source='Manual' LIMIT 1");
+    const findProvider = db.prepare("SELECT id FROM prices WHERE asset_id=? AND date=? AND source!='Manual' LIMIT 1");
+    const update = db.prepare('UPDATE prices SET price=@price,currency=@currency,source=@source WHERE id=@id');
+    const insert = db.prepare('INSERT INTO prices(asset_id,date,price,currency,source) VALUES(@asset_id,@date,@price,@currency,@source)');
+    const results = [];
+    let providerError = null;
+    for (const asset of selected) {
+      try {
+        const history = await fetchAlphaWeeklyHistory(alphaSymbolFor(asset), key, { gate: consumeAlphaVantageRequest, pace: waitForAlphaVantageSlot });
+        let stored = 0;
+        let manualKept = 0;
+        let trimmed = 0;
+        let oldest = null;
+        const save = db.transaction(() => {
+          for (const point of history) {
+            if (!/^\d{4}-\d{2}-\d{2}$/.test(String(point.date)) || !(Number(point.close) > 0) || point.date < cutoff || point.date > today()) { trimmed += 1; continue; }
+            if (findManual.get(asset.id, point.date)) { manualKept += 1; continue; }
+            if (!oldest || point.date < oldest) oldest = point.date;
+            const existing = findProvider.get(asset.id, point.date);
+            const payload = { asset_id: asset.id, date: point.date, price: Number(point.close), currency: asset.currency, source };
+            if (existing) update.run({ ...payload, id: existing.id }); else insert.run(payload);
+            stored += 1;
+          }
+        });
+        save();
+        results.push({ assetId: asset.id, name: asset.name, symbol: alphaSymbolFor(asset), stored, manualKept, trimmed, oldest });
+      } catch (error) {
+        providerError = error;
+        break;
+      }
+    }
+    if (providerError && !results.length) return res.status(providerError.status || 502).json({ error: providerError.publicMessage || 'Alpha Vantage could not fetch history. No prices were saved.' });
+    const totalStored = results.reduce((sum, row) => sum + row.stored, 0);
+    const totalManual = results.reduce((sum, row) => sum + row.manualKept, 0);
+    res.json({
+      ok: true,
+      results,
+      noPositionSkipped,
+      skippedCurrency: currencySkipped,
+      quotaSkipped,
+      requestsRemaining: Math.max(0, ALPHA_VANTAGE_DAILY_LIMIT - alphaRequestsToday()),
+      message: `Backfilled ${totalStored} dated weekly closes across ${results.length} asset${results.length === 1 ? '' : 's'}`
+        + `${totalManual ? `; kept ${totalManual} manual price${totalManual === 1 ? '' : 's'} unchanged` : ''}`
+        + `${noPositionSkipped ? `; skipped ${noPositionSkipped} asset${noPositionSkipped === 1 ? '' : 's'} with no open position` : ''}`
+        + `${quotaSkipped ? `; ${quotaSkipped} eligible asset${quotaSkipped === 1 ? '' : 's'} skipped due to the daily request limit` : ''}`
+        + `${currencySkipped.length ? `; skipped ${currencySkipped.join(', ')} (provider quote currency differs from the asset currency)` : ''}`
+        + `${providerError ? `; stopped early: ${providerError.publicMessage || 'provider error'}` : ''}.`,
+    });
   });
 
   router.post('/api/prices/sync', async (req, res) => {

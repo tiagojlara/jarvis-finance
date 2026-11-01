@@ -1,6 +1,6 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { fetchPriceOnDate } = require('../src/market-data/alphavantage');
+const { fetchPriceOnDate, fetchWeeklyHistory } = require('../src/market-data/alphavantage');
 
 // The free tier rejects outputsize=full outright (verified live); these tests pin the
 // fallback chain to requests the free key can actually serve.
@@ -53,6 +53,35 @@ test('a spent allowance stops the fetch before any provider call', async () => {
   const env = withFetch(() => ({}));
   await assert.rejects(
     () => env.run(() => fetchPriceOnDate('AAPL', '2026-06-10', 'key', { gate: () => false })),
+    /daily request limit/i,
+  );
+  assert.equal(env.urls.length, 0);
+});
+
+test('weekly history comes back ascending from a single free-tier request', async () => {
+  const env = withFetch(() => ({ 'Weekly Time Series': {
+    '2026-01-09': { '4. close': '102.50' },
+    '2026-01-02': { '4. close': '100.00' },
+    '2025-12-26': { '4. close': '0' },
+  } }));
+  const result = await env.run(async () => {
+    let gated = 0;
+    const points = await fetchWeeklyHistory('AAPL', 'key', { gate: () => { gated += 1; return true; } });
+    return { points, gated };
+  });
+  assert.equal(env.urls.length, 1, 'backfill costs exactly one provider call per asset');
+  assert.ok(env.urls[0].includes('TIME_SERIES_WEEKLY'));
+  assert.deepEqual(result.points, [
+    { date: '2026-01-02', close: 100 },
+    { date: '2026-01-09', close: 102.5 },
+  ], 'ascending, zero/negative closes filtered out');
+  assert.equal(result.gated, 1);
+});
+
+test('weekly history refuses a spent allowance before calling the provider', async () => {
+  const env = withFetch(() => ({}));
+  await assert.rejects(
+    () => env.run(() => fetchWeeklyHistory('AAPL', 'key', { gate: () => false })),
     /daily request limit/i,
   );
   assert.equal(env.urls.length, 0);

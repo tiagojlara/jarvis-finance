@@ -306,6 +306,67 @@ test('fund NAV import upserts dated prices and never touches manual entries', as
   assert.equal((await request('prices/import', { method: 'POST', body: { assetId: 999, prices: [{ date: '2026-01-05', price: 1 }] } })).status, 404);
 });
 
+test('history backfill stores weekly closes for held assets in one call each', async (t) => {
+  const previousKey = process.env.ALPHA_VANTAGE_API_KEY;
+  process.env.ALPHA_VANTAGE_API_KEY = 'test-key';
+  t.after(() => { if (previousKey === undefined) delete process.env.ALPHA_VANTAGE_API_KEY; else process.env.ALPHA_VANTAGE_API_KEY = previousKey; });
+  // Dates are relative to the run date so the 3-year trim assertion stays true over time.
+  const day = 86400000;
+  const iso = (msAgo) => new Date(Date.now() - msAgo).toISOString().slice(0, 10);
+  const recent = iso(10 * day);
+  const withinWindow = iso(400 * day);
+  const tooOld = iso(4 * 365 * day);
+  const fetched = [];
+  const { request, db, close } = await startServer({
+    fetchAlphaWeeklyHistory: async (symbol, key, { gate, pace } = {}) => {
+      if (gate && !gate()) throw Object.assign(new Error('limit reached'), { status: 429 });
+      if (pace) await pace();
+      fetched.push(symbol);
+      return [{ date: tooOld, close: 50 }, { date: withinWindow, close: 100 }, { date: recent, close: 120 }];
+    },
+  });
+  t.after(close);
+  const { accountId, assetId } = await seedAccountAndAsset(request);
+  await request(`assets/${assetId}`, { method: 'PUT', body: { alphavantage_symbol: 'KEEP', alphavantage_currency: 'EUR' } });
+  const exited = await request('assets', { method: 'POST', body: { name: 'Exited', type: 'ETF', currency: 'EUR', alphavantage_symbol: 'EXIT', alphavantage_currency: 'EUR' } });
+  const mismatched = await request('assets', { method: 'POST', body: { name: 'Mismatch', type: 'ETF', currency: 'EUR', alphavantage_symbol: 'MISM', alphavantage_currency: 'USD' } });
+  const buy = (id) => request('transactions', { method: 'POST', body: { account_id: accountId, asset_id: id, kind: 'buy', date: '2024-01-02', quantity: 10, unit_price: 10, currency: 'EUR' } });
+  await buy(assetId);
+  await buy(exited.payload.id);
+  await buy(mismatched.payload.id);
+  await request('transactions', { method: 'POST', body: { account_id: accountId, asset_id: exited.payload.id, kind: 'sell', date: '2024-04-01', quantity: 10, unit_price: 12, currency: 'EUR' } });
+  await request('prices', { method: 'POST', body: { asset_id: assetId, date: withinWindow, price: 111, currency: 'EUR', source: 'Manual' } });
+  await request('prices', { method: 'POST', body: { asset_id: assetId, date: recent, price: 999, currency: 'EUR', source: 'Alpha Vantage · end-of-day' } });
+
+  const run = await request('prices/backfill', { method: 'POST', body: {} });
+  assert.equal(run.status, 200, run.payload?.error);
+  assert.deepEqual(fetched, ['KEEP'], 'only held, symbol-matched, currency-consistent assets spend quota');
+  assert.equal(run.payload.noPositionSkipped, 1);
+  assert.deepEqual(run.payload.skippedCurrency, ['Mismatch']);
+  assert.equal(run.payload.requestsRemaining, 24, 'one provider call per asset');
+  const row = run.payload.results[0];
+  assert.deepEqual({ stored: row.stored, manualKept: row.manualKept, trimmed: row.trimmed }, { stored: 1, manualKept: 1, trimmed: 1 });
+  assert.equal(row.oldest, recent, 'the manual date does not count toward stored history');
+
+  const stored = (await request('prices')).payload.filter((p) => p.asset_id === assetId);
+  assert.equal(stored.find((p) => p.date === withinWindow).price, 111, 'manual prices survive the backfill');
+  assert.equal(stored.find((p) => p.date === withinWindow).source, 'Manual');
+  const recentRow = stored.find((p) => p.date === recent);
+  assert.equal(recentRow.price, 120, 'existing provider rows are updated in place');
+  assert.match(recentRow.source, /weekly close/i);
+  assert.equal(stored.some((p) => p.date === tooOld), false, 'history beyond 3 years is trimmed');
+
+  // Explicit ids are the escape hatch: a sold asset can still be backfilled on request.
+  fetched.length = 0;
+  db.prepare("DELETE FROM settings WHERE key='alphavantage_last_request_at'").run(); // skip the 12s pacing wait
+  const forced = await request('prices/backfill', { method: 'POST', body: { assetIds: [exited.payload.id] } });
+  assert.equal(forced.status, 200, forced.payload?.error);
+  assert.deepEqual(fetched, ['EXIT']);
+  assert.equal(forced.payload.results[0].stored, 2, 'no manual rows on this asset: both in-window closes stored');
+  assert.equal(forced.payload.results[0].oldest, withinWindow);
+  assert.equal(forced.payload.noPositionSkipped, 0);
+});
+
 test('backup and restore round-trips without foreign key errors', async (t) => {
   const { request, close } = await startServer();
   t.after(close);

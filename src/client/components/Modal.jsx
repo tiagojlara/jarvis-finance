@@ -14,12 +14,13 @@ const schemas = {
   liabilityBalance: [['liability_id', 'Loan', 'select', 'liabilities'], ['date', 'Balance date', 'date'], ['balance', 'Remaining balance', 'number'], ['notes', 'Notes', 'textarea']],
 };
 
-export default function Modal({ type, data, existing, onClose, onSave }) {
+export default function Modal({ type, data, existing, onClose, onSave, onRefresh }) {
   const [form, setForm] = useState({});
   const [error, setError] = useState('');
   const [symbolResults, setSymbolResults] = useState([]);
   const [searching, setSearching] = useState(false);
   const [fetching, setFetching] = useState(false);
+  const [backfilling, setBackfilling] = useState(false);
   const [fetchNote, setFetchNote] = useState('');
   useEffect(() => {
     if (!type) return;
@@ -52,6 +53,21 @@ export default function Modal({ type, data, existing, onClose, onSave }) {
       setFetchNote(`Filled ${quote.price} ${quote.currency} from ${quote.symbol}'s close on ${quote.date}${reason ? ` (${reason})` : ''}; press Save record to store it. ${quote.requestsRemaining} of 25 provider requests remain today.`);
     } catch (e) { setError(e.message); } finally { setFetching(false); }
   };
+  // One-call history backfill for this single asset: stores up to 3 years of weekly
+  // closes straight into the database (unlike the dated fetch, which only fills the
+  // form). Works for sold assets too; manual prices on the same dates are kept.
+  const backfillAssetHistory = async () => {
+    if (!form.asset_id) { setError('Choose an asset first.'); return; }
+    setError(''); setFetchNote(''); setBackfilling(true);
+    try {
+      const result = await api('prices/backfill', { method: 'POST', body: JSON.stringify({ assetIds: [Number(form.asset_id)] }) });
+      const row = result.results?.[0];
+      setFetchNote(row
+        ? `Stored ${row.stored} weekly close${row.stored === 1 ? '' : 's'} for ${row.name}${row.oldest ? ` back to ${row.oldest}` : ''}${row.manualKept ? `, kept ${row.manualKept} manual price${row.manualKept === 1 ? '' : 's'}` : ''}. ${result.requestsRemaining} of 25 provider requests remain today.`
+        : result.message);
+      await onRefresh?.();
+    } catch (e) { setError(e.message); } finally { setBackfilling(false); }
+  };
   const submit = async (event) => {
     event.preventDefault(); setError('');
     const payload = { ...form };
@@ -79,5 +95,5 @@ export default function Modal({ type, data, existing, onClose, onSave }) {
     const vals = ['accounts', 'assets', 'cashAssets', 'physicalAssets', 'liabilities'].includes(choices) ? options(choices) : Array.isArray(choices) ? choices.map((v) => [v, v || 'Not selected']) : [];
     const required = ['name', 'date', 'price', 'value'].includes(key) || (key === 'physical_asset_id' && type === 'valuation') || (key === 'liability_id' && type === 'liabilityBalance') || (key === 'original_amount' && type === 'liability') || (key === 'balance' && ['cashBalance', 'liabilityBalance'].includes(type)) || (key === 'amount' && (type === 'dividend' || (type === 'transaction' && !['buy', 'sell'].includes(form.kind)))) || (key === 'quantity' && type === 'transaction' && ['buy', 'sell'].includes(form.kind)) || (key === 'unit_price' && type === 'transaction' && ['buy', 'sell'].includes(form.kind));
     return <label key={key} className={`field ${kind === 'textarea' ? 'field-wide' : ''}`}><span>{label}</span>{kind === 'select' ? <select required={key === 'account_id' || (key === 'physical_asset_id' && type === 'valuation') || (key === 'liability_id' && type === 'liabilityBalance') || (key === 'asset_id' && ['price', 'dividend'].includes(type))} value={form[key] ?? ''} onChange={(e) => { const value=e.target.value; const next={...form,[key]:value}; if(type==='cashBalance'&&key==='asset_id'){const asset=data.assets.find((item)=>String(item.id)===value);if(asset)next.currency=asset.currency;} if(type==='cashBalance'&&key==='account_id'&&!form.asset_id){const account=data.accounts.find((item)=>String(item.id)===value);if(account)next.currency=account.currency;} if(['valuation','liability'].includes(type)&&key==='physical_asset_id'&&value){const asset=data.physical_assets.find((item)=>String(item.id)===value);if(asset)next.currency=asset.currency;} setForm(next); }}>{vals.map(([v, text]) => <option key={v} value={v}>{text}</option>)}</select> : kind === 'textarea' ? <textarea value={form[key] || ''} onChange={(e) => setForm({ ...form, [key]: e.target.value })}/> : <input required={required} min={kind === 'number' ? '0' : undefined} step={kind === 'number' ? 'any' : undefined} type={kind} value={form[key] ?? ''} onChange={(e) => setForm({ ...form, [key]: e.target.value })}/>}</label>;
-  })}</div>{type === 'price' && <><button type="button" className="button button-quiet assumption-save" disabled={fetching} onClick={fetchPriceForDate}>{fetching ? 'Fetching from Alpha Vantage…' : 'Fetch price for this date'}</button>{fetchNote && <p className="panel-note" role="status">{fetchNote}</p>}</>}{error && <p className="form-error">{error}</p>}<footer className="modal-actions"><button type="button" className="button button-quiet" onClick={onClose}>Cancel</button><button className="button button-primary">Save record</button></footer></form></section></div>;
+  })}</div>{type === 'price' && <><div className="button-row"><button type="button" className="button button-quiet assumption-save" disabled={fetching || backfilling} onClick={fetchPriceForDate}>{fetching ? 'Fetching from Alpha Vantage…' : 'Fetch price for this date'}</button><button type="button" className="button button-quiet assumption-save" disabled={fetching || backfilling} onClick={backfillAssetHistory}>{backfilling ? 'Backfilling history…' : 'Backfill history (weekly closes)'}</button></div>{fetchNote && <p className="panel-note" role="status">{fetchNote}</p>}</>}{error && <p className="form-error">{error}</p>}<footer className="modal-actions"><button type="button" className="button button-quiet" onClick={onClose}>Cancel</button><button className="button button-primary">Save record</button></footer></form></section></div>;
 }

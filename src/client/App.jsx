@@ -102,7 +102,7 @@ export default function App() {
     {error && <div className="error-banner" role="status"><span>{error}</span><button onClick={() => setError('')} aria-label="Dismiss">×</button></div>}
     {busy ? <div className="loading-state">Opening your local portfolio…</div> : content[page]}
     <footer className="app-footer"><span>● Stored on this device</span><span>Manual prices are not live quotes</span><button className="mobile-export" onClick={exportCsv}>Export CSV</button></footer>
-    </main><Modal type={modal} data={data} existing={editing} onClose={() => { setModal(null); setEditing(null); }} onSave={saveRecord}/><input id="restore-file" className="hidden-input" type="file" accept="application/json" onChange={restore}/></div>;
+    </main><Modal type={modal} data={data} existing={editing} onClose={() => { setModal(null); setEditing(null); }} onSave={saveRecord} onRefresh={refresh}/><input id="restore-file" className="hidden-input" type="file" accept="application/json" onChange={restore}/></div>;
 }
 
 function download(blob, filename) { const url = URL.createObjectURL(blob); const link = document.createElement('a'); link.href = url; link.download = filename; link.click(); URL.revokeObjectURL(url); }
