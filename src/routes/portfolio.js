@@ -5,6 +5,11 @@ const { fetchFxRates } = require('../market-data/frankfurter');
 
 const ALLOWED_TABLES = new Set(TABLE_ORDER);
 
+// Quota bookkeeping written by the market-data router. The browser loads and re-saves the
+// settings blob, so these must never round-trip through it (a stale write would refill the
+// daily Alpha Vantage allowance).
+const SERVER_ONLY_SETTINGS = new Set(['alphavantage_usage', 'alphavantage_last_request_at']);
+
 // One row per asset: the newest date, preferring Manual over provider rows on the same date.
 const LATEST_PRICES_SQL = `SELECT p.* FROM prices p WHERE p.id = (
   SELECT q.id FROM prices q WHERE q.asset_id = p.asset_id
@@ -68,12 +73,17 @@ function createPortfolioRouter({ db, fetchFxRates: fetchFx = fetchFxRates } = {}
   router.get('/api/summary', (req, res) => res.json(summaryResponse(db)));
 
   router.get('/api/settings', (req, res) => {
-    res.json(Object.fromEntries(db.prepare('SELECT key,value FROM settings').all().map((x) => [x.key, JSON.parse(x.value)])));
+    res.json(Object.fromEntries(db.prepare('SELECT key,value FROM settings').all()
+      .filter((x) => !SERVER_ONLY_SETTINGS.has(x.key))
+      .map((x) => [x.key, JSON.parse(x.value)])));
   });
 
   router.put('/api/settings', (req, res) => {
     const save = db.prepare('INSERT INTO settings(key,value) VALUES(?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value');
-    for (const [key, value] of Object.entries(req.body || {})) save.run(key, JSON.stringify(value));
+    for (const [key, value] of Object.entries(req.body || {})) {
+      if (SERVER_ONLY_SETTINGS.has(key)) continue;
+      save.run(key, JSON.stringify(value));
+    }
     res.json({ ok: true });
   });
 
@@ -149,8 +159,14 @@ function createPortfolioRouter({ db, fetchFxRates: fetchFx = fetchFxRates } = {}
       if (!(data.price > 0)) return res.status(400).json({ error: 'Price must be positive' });
     }
 
-    if (table === 'dividends' && !(data.amount > 0)) {
-      return res.status(400).json({ error: 'Dividend amount must be positive' });
+    if (table === 'dividends') {
+      if (!(data.amount > 0)) {
+        return res.status(400).json({ error: 'Dividend amount must be positive' });
+      }
+      const asset = db.prepare('SELECT currency FROM assets WHERE id=?').get(data.asset_id);
+      if (!asset || asset.currency !== data.currency) {
+        return res.status(400).json({ error: 'Dividend currency must match the asset currency' });
+      }
     }
 
     if (table === 'cash_balances') {
@@ -192,6 +208,14 @@ function createPortfolioRouter({ db, fetchFxRates: fetchFx = fetchFxRates } = {}
       }
     }
 
+    if (table === 'accounts' && req.body.currency) {
+      const prior = db.prepare('SELECT currency FROM accounts WHERE id=?').get(id);
+      if (prior && prior.currency !== req.body.currency
+        && ['transactions', 'cash_balances', 'dividends'].some((t) => db.prepare(`SELECT 1 FROM ${t} WHERE account_id=? LIMIT 1`).get(id))) {
+        return res.status(400).json({ error: 'Currency cannot be changed after transactions, cash balances, or dividends have been recorded for this account.' });
+      }
+    }
+
     if (table === 'transactions') {
       const existing = db.prepare('SELECT * FROM transactions WHERE id=?').get(id);
       if (existing) {
@@ -209,6 +233,17 @@ function createPortfolioRouter({ db, fetchFxRates: fetchFx = fetchFxRates } = {}
         const updates = Object.fromEntries(fields.filter((k) => req.body[k] !== undefined).map((k) => [k, req.body[k]]));
         const error = cashBalanceError(db, { ...existing, ...updates }, Number(id));
         if (error) return res.status(400).json({ error });
+      }
+    }
+
+    if (table === 'dividends') {
+      const existing = db.prepare('SELECT * FROM dividends WHERE id=?').get(id);
+      if (existing) {
+        const updates = Object.fromEntries(fields.filter((k) => req.body[k] !== undefined).map((k) => [k, req.body[k]]));
+        const merged = { ...existing, ...updates };
+        if (!(Number(merged.amount) > 0)) return res.status(400).json({ error: 'Dividend amount must be positive' });
+        const asset = db.prepare('SELECT currency FROM assets WHERE id=?').get(merged.asset_id);
+        if (!asset || asset.currency !== merged.currency) return res.status(400).json({ error: 'Dividend currency must match the asset currency' });
       }
     }
 

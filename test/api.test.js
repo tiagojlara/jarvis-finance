@@ -5,6 +5,9 @@ const os = require('node:os');
 const path = require('node:path');
 const { createApp } = require('../src/app');
 
+// Matches the market-data router's own day key so quota rows seeded here are "today".
+const today = () => new Date().toISOString().slice(0, 10);
+
 // Boots the real app against a throwaway database with network calls stubbed.
 async function startServer(overrides = {}) {
   const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'northstar-api-test-'));
@@ -155,6 +158,61 @@ test('FX sync refreshes provider rates on re-sync but never overwrites Manual ro
   assert.equal(thirdSync.payload.stored, 0, 'manual rates are never overwritten');
   const afterManual = (await request('fx_rates')).payload;
   assert.equal(afterManual[0].rate, 9.9);
+});
+
+test('Alpha Vantage quota counters survive a stale client settings round-trip', async (t) => {
+  const { request, db, close } = await startServer();
+  t.after(close);
+  // Model a price sync that consumed quota while the page sat open.
+  db.prepare('INSERT INTO settings(key,value) VALUES(?,?)').run('alphavantage_usage', JSON.stringify({ date: today(), count: 5 }));
+
+  const stored = (await request('settings')).payload;
+  assert.equal(stored.alphavantage_usage, undefined, 'quota counters are not exposed to the browser');
+
+  // The old client spread every loaded setting back into its PUT; server-owned keys must be ignored.
+  const staleWrite = await request('settings', { method: 'PUT', body: { homeCurrency: 'SEK', alphavantage_usage: { date: today(), count: 0 }, alphavantage_last_request_at: 0 } });
+  assert.equal(staleWrite.status, 200);
+  assert.equal(JSON.parse(db.prepare("SELECT value FROM settings WHERE key='alphavantage_usage'").get().value).count, 5, 'quota is not reset by a stale settings write');
+  assert.equal((await request('settings')).payload.homeCurrency, 'SEK', 'normal settings still save');
+});
+
+test('account currency cannot be changed once the account has history', async (t) => {
+  const { request, close } = await startServer();
+  t.after(close);
+  const { accountId, assetId } = await seedAccountAndAsset(request);
+  await request('transactions', { method: 'POST', body: { account_id: accountId, asset_id: assetId, kind: 'buy', date: '2024-01-02', quantity: 10, unit_price: 10, currency: 'EUR' } });
+  const blocked = await request(`accounts/${accountId}`, { method: 'PUT', body: { currency: 'SEK' } });
+  assert.equal(blocked.status, 400);
+  assert.match(blocked.payload.error, /Currency cannot be changed/i);
+
+  // Cash balances pin the currency too (they must match the account).
+  const savings = await request('accounts', { method: 'POST', body: { name: 'Savings', currency: 'EUR' } });
+  await request('cash_balances', { method: 'POST', body: { account_id: savings.payload.id, date: '2024-03-01', balance: 100, currency: 'EUR' } });
+  assert.equal((await request(`accounts/${savings.payload.id}`, { method: 'PUT', body: { currency: 'USD' } })).status, 400);
+
+  // Accounts without history remain editable.
+  const fresh = await request('accounts', { method: 'POST', body: { name: 'Empty', currency: 'EUR' } });
+  assert.equal((await request(`accounts/${fresh.payload.id}`, { method: 'PUT', body: { currency: 'USD' } })).status, 200);
+});
+
+test('dividend currency must match the asset currency', async (t) => {
+  const { request, close } = await startServer();
+  t.after(close);
+  const { accountId, assetId } = await seedAccountAndAsset(request);
+  const mismatch = await request('dividends', { method: 'POST', body: { asset_id: assetId, account_id: accountId, date: '2024-04-01', amount: 12, currency: 'USD' } });
+  assert.equal(mismatch.status, 400);
+  assert.match(mismatch.payload.error, /must match the asset currency/i);
+
+  const saved = await request('dividends', { method: 'POST', body: { asset_id: assetId, account_id: accountId, date: '2024-04-01', amount: 12, currency: 'EUR' } });
+  assert.equal(saved.status, 200, saved.payload?.error);
+  assert.equal((await request(`dividends/${saved.payload.id}`, { method: 'PUT', body: { currency: 'BRL' } })).status, 400, 'editing cannot introduce a mismatch either');
+  assert.equal((await request(`dividends/${saved.payload.id}`, { method: 'PUT', body: { notes: 'restated' } })).status, 200, 'unrelated edits still work');
+});
+
+test('foreign keys are explicitly enabled on every connection', async (t) => {
+  const { db, close } = await startServer();
+  t.after(close);
+  assert.equal(db.pragma('foreign_keys', { simple: true }), 1);
 });
 
 test('backup and restore round-trips without foreign key errors', async (t) => {

@@ -45,6 +45,9 @@ function openDatabase(dataDir) {
   fs.mkdirSync(dataDir, { recursive: true });
   const db = new Database(path.join(dataDir, 'portfolio.sqlite'));
   db.pragma('journal_mode = WAL');
+  // Set explicitly: restore ordering and delete guards rely on foreign keys,
+  // and we must not inherit that guarantee from a dependency default.
+  db.pragma('foreign_keys = ON');
   db.exec(SCHEMA);
 
   if (!hasColumn(db, 'assets', 'price_symbol')) db.exec("ALTER TABLE assets ADD COLUMN price_symbol TEXT NOT NULL DEFAULT ''");

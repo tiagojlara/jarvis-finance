@@ -68,7 +68,8 @@ export default function App() {
   const updateSettings = async (next) => {
     if (next.fx_rate) { await api('fx_rates', { method: 'POST', body: JSON.stringify(next.fx_rate) }); await refresh(); return; }
     const merged = { ...settings, ...next };
-    setSettings(merged); await api('settings', { method: 'PUT', body: JSON.stringify(merged) }); await refresh();
+    // Send only the changed keys: a full-state PUT could clobber settings another request updated server-side.
+    setSettings(merged); await api('settings', { method: 'PUT', body: JSON.stringify(next) }); await refresh();
   };
   const exportCsv = () => {
     const header = ['Name', 'Ticker', 'Type', 'Currency', 'Quantity', 'Cost basis', 'Latest price', 'Price date', 'Price source', 'Current value', 'Unrealized gain'];
