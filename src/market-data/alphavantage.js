@@ -43,6 +43,19 @@ async function fetchLatestPrice(symbol, apiKey) {
   return { symbol: raw['01. symbol'] || symbol, close, date };
 }
 
+// Daily history: the close of the last trading day on or before `date` (market-closed days
+// resolve to the previous close, matching how the app values holdings on any given date).
+async function fetchPriceOnDate(symbol, date, apiKey) {
+  const payload = await request({ function: 'TIME_SERIES_DAILY', symbol, outputsize: 'full' }, apiKey);
+  const series = payload['Time Series (Daily)'];
+  if (!series) return null;
+  const chosen = Object.keys(series).filter((day) => day <= date).sort().at(-1);
+  if (!chosen) return null;
+  const close = Number(series[chosen]['4. close']);
+  if (!(close > 0)) return null;
+  return { symbol, close, date: chosen };
+}
+
 async function searchSymbols(keywords, apiKey) {
   const payload = await request({ function: 'SYMBOL_SEARCH', keywords }, apiKey);
   return (payload.bestMatches || []).map((match) => ({
@@ -55,4 +68,4 @@ async function searchSymbols(keywords, apiKey) {
   })).filter((match) => match.symbol);
 }
 
-module.exports = { fetchLatestPrice, searchSymbols };
+module.exports = { fetchLatestPrice, fetchPriceOnDate, searchSymbols };

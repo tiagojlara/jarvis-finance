@@ -246,6 +246,32 @@ test('price sync refreshes only assets with open positions', async (t) => {
   assert.equal(forced.payload.skippedNoPosition, 0);
 });
 
+test('dated quote fetch can fill past prices for assets that are no longer held', async (t) => {
+  const previousKey = process.env.ALPHA_VANTAGE_API_KEY;
+  process.env.ALPHA_VANTAGE_API_KEY = 'test-key';
+  t.after(() => { if (previousKey === undefined) delete process.env.ALPHA_VANTAGE_API_KEY; else process.env.ALPHA_VANTAGE_API_KEY = previousKey; });
+  const calls = [];
+  const { request, close } = await startServer({
+    fetchAlphaPriceOnDate: async (symbol, date) => { calls.push({ symbol, date }); return { symbol, close: 11.5, date: '2024-03-15' }; },
+  });
+  t.after(close);
+  const { accountId, assetId } = await seedAccountAndAsset(request);
+  await request(`assets/${assetId}`, { method: 'PUT', body: { alphavantage_symbol: 'EXIT', alphavantage_currency: 'EUR' } });
+  // Open and close the position: today's sync skips this asset, but a dated fetch must still work.
+  await request('transactions', { method: 'POST', body: { account_id: accountId, asset_id: assetId, kind: 'buy', date: '2024-01-02', quantity: 10, unit_price: 10, currency: 'EUR' } });
+  await request('transactions', { method: 'POST', body: { account_id: accountId, asset_id: assetId, kind: 'sell', date: '2024-04-01', quantity: 10, unit_price: 12, currency: 'EUR' } });
+
+  const quote = await request(`market-data/quote?assetId=${assetId}&date=2024-03-20`);
+  assert.equal(quote.status, 200, quote.payload?.error);
+  assert.deepEqual(calls, [{ symbol: 'EXIT', date: '2024-03-20' }]);
+  assert.equal(quote.payload.price, 11.5);
+  assert.equal(quote.payload.date, '2024-03-15', 'the actual trading day fetched is reported');
+  assert.equal((await request('prices')).payload.length, 0, 'the quote endpoint is read-only; saving stays with the form');
+
+  assert.equal((await request(`market-data/quote?assetId=${assetId}&date=2099-01-01`)).status, 400, 'future dates are rejected');
+  assert.equal((await request('market-data/quote?assetId=999&date=2024-03-20')).status, 404);
+});
+
 test('backup and restore round-trips without foreign key errors', async (t) => {
   const { request, close } = await startServer();
   t.after(close);

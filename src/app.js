@@ -15,6 +15,7 @@ function createApp(options = {}) {
     db,
     fetchLatestPrices: options.fetchLatestPrices,
     fetchLatestAlphaPrice: options.fetchLatestAlphaPrice,
+    fetchAlphaPriceOnDate: options.fetchAlphaPriceOnDate,
     searchAlphaSymbols: options.searchAlphaSymbols,
   }));
 

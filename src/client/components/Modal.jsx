@@ -19,10 +19,13 @@ export default function Modal({ type, data, existing, onClose, onSave }) {
   const [error, setError] = useState('');
   const [symbolResults, setSymbolResults] = useState([]);
   const [searching, setSearching] = useState(false);
+  const [fetching, setFetching] = useState(false);
+  const [fetchNote, setFetchNote] = useState('');
   useEffect(() => {
     if (!type) return;
     setError('');
     setSymbolResults([]);
+    setFetchNote('');
     setForm({ date: today(), currency: data.accounts[0]?.currency || 'EUR', source: type === 'valuation' ? 'Manual estimate' : 'Manual', account_id: data.accounts[0]?.id || '', asset_id: type === 'cashBalance' ? '' : data.assets[0]?.id || '', physical_asset_id: data.physical_assets?.[0]?.id || '', liability_id: data.liabilities?.[0]?.id || '', kind: 'buy', type: type === 'physicalAsset' ? 'Property' : type === 'liability' ? 'Mortgage' : 'Stock', ...(existing || {}) });
   }, [type, existing?.id]);
   useEffect(() => { if (!type) return undefined; const onKey = (e) => e.key === 'Escape' && onClose(); window.addEventListener('keydown', onKey); return () => window.removeEventListener('keydown', onKey); }, [type, onClose]);
@@ -35,6 +38,17 @@ export default function Modal({ type, data, existing, onClose, onSave }) {
     setError(''); setSearching(true);
     try { const result = await api(`market-data/search?keywords=${encodeURIComponent(keywords)}`); setSymbolResults(result.results || []); if (!result.results?.length) setError('No symbols found. Try a ticker or a shorter name.'); }
     catch (e) { setError(e.message); } finally { setSearching(false); }
+  };
+  // Dated provider fetch for the manual-price form: fills the inputs for review only.
+  // Works for assets no longer held, so past gaps in price history can be repaired.
+  const fetchPriceForDate = async () => {
+    if (!form.asset_id) { setError('Choose an asset first.'); return; }
+    setError(''); setFetchNote(''); setFetching(true);
+    try {
+      const quote = await api(`market-data/quote?assetId=${encodeURIComponent(form.asset_id)}&date=${encodeURIComponent(form.date || today())}`);
+      setForm((current) => ({ ...current, price: String(quote.price), source: quote.source, date: quote.date }));
+      setFetchNote(`Filled ${quote.price} ${quote.currency} from ${quote.symbol}'s close on ${quote.date}${quote.date !== form.date ? ' (market was closed on your chosen date)' : ''}; press Save record to store it. ${quote.requestsRemaining} of 25 provider requests remain today.`);
+    } catch (e) { setError(e.message); } finally { setFetching(false); }
   };
   const submit = async (event) => {
     event.preventDefault(); setError('');
@@ -63,5 +77,5 @@ export default function Modal({ type, data, existing, onClose, onSave }) {
     const vals = ['accounts', 'assets', 'cashAssets', 'physicalAssets', 'liabilities'].includes(choices) ? options(choices) : Array.isArray(choices) ? choices.map((v) => [v, v || 'Not selected']) : [];
     const required = ['name', 'date', 'price', 'value'].includes(key) || (key === 'physical_asset_id' && type === 'valuation') || (key === 'liability_id' && type === 'liabilityBalance') || (key === 'original_amount' && type === 'liability') || (key === 'balance' && ['cashBalance', 'liabilityBalance'].includes(type)) || (key === 'amount' && (type === 'dividend' || (type === 'transaction' && !['buy', 'sell'].includes(form.kind)))) || (key === 'quantity' && type === 'transaction' && ['buy', 'sell'].includes(form.kind)) || (key === 'unit_price' && type === 'transaction' && ['buy', 'sell'].includes(form.kind));
     return <label key={key} className={`field ${kind === 'textarea' ? 'field-wide' : ''}`}><span>{label}</span>{kind === 'select' ? <select required={key === 'account_id' || (key === 'physical_asset_id' && type === 'valuation') || (key === 'liability_id' && type === 'liabilityBalance') || (key === 'asset_id' && ['price', 'dividend'].includes(type))} value={form[key] ?? ''} onChange={(e) => { const value=e.target.value; const next={...form,[key]:value}; if(type==='cashBalance'&&key==='asset_id'){const asset=data.assets.find((item)=>String(item.id)===value);if(asset)next.currency=asset.currency;} if(type==='cashBalance'&&key==='account_id'&&!form.asset_id){const account=data.accounts.find((item)=>String(item.id)===value);if(account)next.currency=account.currency;} if(['valuation','liability'].includes(type)&&key==='physical_asset_id'&&value){const asset=data.physical_assets.find((item)=>String(item.id)===value);if(asset)next.currency=asset.currency;} setForm(next); }}>{vals.map(([v, text]) => <option key={v} value={v}>{text}</option>)}</select> : kind === 'textarea' ? <textarea value={form[key] || ''} onChange={(e) => setForm({ ...form, [key]: e.target.value })}/> : <input required={required} min={kind === 'number' ? '0' : undefined} step={kind === 'number' ? 'any' : undefined} type={kind} value={form[key] ?? ''} onChange={(e) => setForm({ ...form, [key]: e.target.value })}/>}</label>;
-  })}</div>{error && <p className="form-error">{error}</p>}<footer className="modal-actions"><button type="button" className="button button-quiet" onClick={onClose}>Cancel</button><button className="button button-primary">Save record</button></footer></form></section></div>;
+  })}</div>{type === 'price' && <><button type="button" className="button button-quiet assumption-save" disabled={fetching} onClick={fetchPriceForDate}>{fetching ? 'Fetching from Alpha Vantage…' : 'Fetch price for this date'}</button>{fetchNote && <p className="panel-note" role="status">{fetchNote}</p>}</>}{error && <p className="form-error">{error}</p>}<footer className="modal-actions"><button type="button" className="button button-quiet" onClick={onClose}>Cancel</button><button className="button button-primary">Save record</button></footer></form></section></div>;
 }

@@ -17,6 +17,7 @@ function createPricesRouter({
   db,
   fetchLatestPrices = marketstack.fetchLatestPrices,
   fetchLatestAlphaPrice = alphavantage.fetchLatestPrice,
+  fetchAlphaPriceOnDate = alphavantage.fetchPriceOnDate,
   searchAlphaSymbols = alphavantage.searchSymbols,
 } = {}) {
   const router = express.Router();
@@ -84,6 +85,39 @@ function createPricesRouter({
       res.json({ results: await searchAlphaSymbols(keywords, key) });
     } catch (error) {
       res.status(error.status || 502).json({ error: error.publicMessage || 'Alpha Vantage symbol search failed.' });
+    }
+  });
+
+  // Read-only quote for one asset on a chosen (past) date: fills the manual-price form for review,
+  // it never writes. Assets with no open position are still allowed — this is how historical
+  // gaps on sold positions get repaired, one quota request at a time.
+  router.get('/api/market-data/quote', async (req, res) => {
+    const assetId = Number(req.query.assetId);
+    const date = /^\d{4}-\d{2}-\d{2}$/.test(String(req.query.date || '')) ? String(req.query.date) : today();
+    if (!Number.isInteger(assetId) || assetId < 1) return res.status(400).json({ error: 'Choose an asset first.' });
+    if (date > today()) return res.status(400).json({ error: 'Cannot fetch a price for a future date.' });
+    const asset = db.prepare('SELECT * FROM assets WHERE id=?').get(assetId);
+    if (!asset) return res.status(404).json({ error: 'Asset not found.' });
+    if (activeProvider() !== 'alphavantage') return res.status(400).json({ error: 'Dated fetch needs Alpha Vantage; Marketstack supports latest prices only. Enter the price manually for now.' });
+    const symbol = alphaSymbolFor(asset);
+    if (!symbol) return res.status(400).json({ error: 'Add an Alpha Vantage symbol to this asset first: edit the asset and search for its listing.' });
+    const key = alphaKey();
+    if (!key) return res.status(400).json({ error: 'Alpha Vantage is not configured. Add ALPHA_VANTAGE_API_KEY to the local .env file and restart the app.' });
+    if (!consumeAlphaVantageRequest()) return res.status(429).json({ error: 'Alpha Vantage daily request limit reached. Try again tomorrow.' });
+    try {
+      await waitForAlphaVantageSlot();
+      const quote = await fetchAlphaPriceOnDate(symbol, date, key);
+      if (!quote) return res.status(502).json({ error: `Alpha Vantage has no daily history for ${symbol} on or before ${date}.` });
+      res.json({
+        price: Number(quote.close),
+        date: quote.date,
+        symbol,
+        currency: asset.alphavantage_currency || asset.currency,
+        source: 'Alpha Vantage · end-of-day',
+        requestsRemaining: Math.max(0, ALPHA_VANTAGE_DAILY_LIMIT - alphaRequestsToday()),
+      });
+    } catch (error) {
+      res.status(error.status || 502).json({ error: error.publicMessage || 'Alpha Vantage could not fetch that price.' });
     }
   });
 
