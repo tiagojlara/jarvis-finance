@@ -28,7 +28,7 @@ export default function App() {
     return () => window.removeEventListener('popstate', onPop);
   }, []);
   useEffect(() => {
-    document.title = `Northstar · ${titles[page]}`;
+    document.title = `Jarvis Finance · ${titles[page]}`;
     // Normalize any unknown deep link (e.g. /anything) back to the page we actually render.
     if (window.location.pathname !== pathFor(page)) window.history.replaceState({ page }, '', pathFor(page));
   }, [page]);
@@ -75,9 +75,9 @@ export default function App() {
     const header = ['Name', 'Ticker', 'Type', 'Currency', 'Quantity', 'Cost basis', 'Latest price', 'Price date', 'Price source', 'Current value', 'Unrealized gain'];
     const rows = data.summary.holdings.map((h) => [h.name, h.ticker, h.type, h.currency, h.quantity, h.cost_basis, h.price, h.price_date, h.price_source, h.current_value, h.unrealized_gain]);
     const blob = new Blob([[header, ...rows].map((row) => row.map(escapeCsv).join(',')).join('\r\n')], { type: 'text/csv;charset=utf-8' });
-    download(blob, `northstar-portfolio-${new Date().toISOString().slice(0, 10)}.csv`);
+    download(blob, `jarvis-finance-portfolio-${new Date().toISOString().slice(0, 10)}.csv`);
   };
-  const backup = async () => { const file = await api('backup'); download(new Blob([JSON.stringify(file, null, 2)], { type: 'application/json' }), `northstar-backup-${new Date().toISOString().slice(0, 10)}.json`); };
+  const backup = async () => { const file = await api('backup'); download(new Blob([JSON.stringify(file, null, 2)], { type: 'application/json' }), `jarvis-finance-backup-${new Date().toISOString().slice(0, 10)}.json`); };
   useEffect(() => { const listener = () => backup(); window.addEventListener('backup-data', listener); return () => window.removeEventListener('backup-data', listener); }, [data]);
   const restore = async (event) => {
     const file = event.target.files?.[0]; if (!file) return;

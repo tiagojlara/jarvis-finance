@@ -1,4 +1,4 @@
-# Northstar · Personal portfolio planner
+# Jarvis Finance · Personal portfolio planner
 
 A local-first personal investment tracker and retirement planning tool. It is for tracking and scenario exploration, not financial advice, and it does not trade.
 
