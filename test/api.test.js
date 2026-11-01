@@ -215,6 +215,37 @@ test('foreign keys are explicitly enabled on every connection', async (t) => {
   assert.equal(db.pragma('foreign_keys', { simple: true }), 1);
 });
 
+test('price sync refreshes only assets with open positions', async (t) => {
+  const previousKey = process.env.ALPHA_VANTAGE_API_KEY;
+  process.env.ALPHA_VANTAGE_API_KEY = 'test-key';
+  t.after(() => { if (previousKey === undefined) delete process.env.ALPHA_VANTAGE_API_KEY; else process.env.ALPHA_VANTAGE_API_KEY = previousKey; });
+  const fetched = [];
+  const { request, db, close } = await startServer({ fetchLatestAlphaPrice: async (symbol) => { fetched.push(symbol); return { symbol, date: '2024-05-01', close: 12.5 }; } });
+  t.after(close);
+  const account = await request('accounts', { method: 'POST', body: { name: 'Brokerage', currency: 'EUR' } });
+  const open = await request('assets', { method: 'POST', body: { name: 'Keeper', type: 'ETF', currency: 'EUR', alphavantage_symbol: 'KEEP', alphavantage_currency: 'EUR' } });
+  const closed = await request('assets', { method: 'POST', body: { name: 'Exited', type: 'ETF', currency: 'EUR', alphavantage_symbol: 'EXIT', alphavantage_currency: 'EUR' } });
+  const buy = (assetId) => request('transactions', { method: 'POST', body: { account_id: account.payload.id, asset_id: assetId, kind: 'buy', date: '2024-01-02', quantity: 10, unit_price: 10, currency: 'EUR' } });
+  await buy(open.payload.id);
+  await buy(closed.payload.id);
+  await request('transactions', { method: 'POST', body: { account_id: account.payload.id, asset_id: closed.payload.id, kind: 'sell', date: '2024-04-01', quantity: 10, unit_price: 12, currency: 'EUR' } });
+
+  const sync = await request('prices/sync', { method: 'POST', body: {} });
+  assert.equal(sync.status, 200, sync.payload?.error);
+  assert.deepEqual(fetched, ['KEEP'], 'fully sold assets must not consume provider quota');
+  assert.equal(sync.payload.stored, 1);
+  assert.equal(sync.payload.skippedNoPosition, 1);
+  assert.match(sync.payload.message, /no open position/i);
+
+  // Explicitly selected ids are the escape hatch: a sold asset can still be force-refreshed.
+  fetched.length = 0;
+  db.prepare("DELETE FROM settings WHERE key='alphavantage_last_request_at'").run(); // skip the 12s pacing wait
+  const forced = await request('prices/sync', { method: 'POST', body: { assetIds: [closed.payload.id] } });
+  assert.equal(forced.status, 200, forced.payload?.error);
+  assert.deepEqual(fetched, ['EXIT']);
+  assert.equal(forced.payload.skippedNoPosition, 0);
+});
+
 test('backup and restore round-trips without foreign key errors', async (t) => {
   const { request, close } = await startServer();
   t.after(close);

@@ -1,6 +1,7 @@
 const express = require('express');
 const marketstack = require('../market-data/marketstack');
 const alphavantage = require('../market-data/alphavantage');
+const { isHeld } = require('./portfolio');
 
 const ALPHA_VANTAGE_DAILY_LIMIT = 25;
 const ALPHA_VANTAGE_MIN_INTERVAL_MS = 12000;
@@ -94,14 +95,19 @@ function createPricesRouter({
 
     const requestedIds = Array.isArray(req.body?.assetIds) ? [...new Set(req.body.assetIds.map(Number).filter(Number.isInteger))] : null;
     if (requestedIds && (!requestedIds.length || requestedIds.length > 100)) return res.status(400).json({ error: 'Choose between 1 and 100 assets to update.' });
-    const assets = requestedIds
+    const allAssets = requestedIds
       ? db.prepare(`SELECT * FROM assets WHERE id IN (${requestedIds.map(() => '?').join(',')})`).all(...requestedIds)
       : db.prepare('SELECT * FROM assets ORDER BY id').all();
+    // A full sync only spends the daily provider allowance on assets with open positions;
+    // fully sold assets need no valuation anymore. Explicitly selected ids are honored as-is.
+    const openAssets = requestedIds ? allAssets : allAssets.filter((asset) => isHeld(db, asset.id));
+    const noPositionSkipped = allAssets.length - openAssets.length;
+    const skipNote = noPositionSkipped ? ` ${noPositionSkipped} asset${noPositionSkipped === 1 ? '' : 's'} with no open positions were skipped.` : '';
 
-    let candidates = assets
+    let candidates = openAssets
       .map((asset) => ({ asset, symbol: provider === 'alphavantage' ? alphaSymbolFor(asset) : marketSymbolFor(asset) }))
       .filter((item) => item.symbol);
-    if (!candidates.length) return res.json({ ok: true, stored: 0, skipped: assets.length, unmatched: [], message: `No assets have a ${provider === 'alphavantage' ? 'Alpha Vantage' : 'Marketstack'} symbol. Edit an asset to add its price lookup symbol.` });
+    if (!candidates.length) return res.json({ ok: true, stored: 0, skipped: allAssets.length, skippedNoPosition: noPositionSkipped, unmatched: [], message: `No assets have a ${provider === 'alphavantage' ? 'Alpha Vantage' : 'Marketstack'} symbol. Edit an asset to add its price lookup symbol.${skipNote}` });
 
     try {
       let rows;
@@ -158,16 +164,17 @@ function createPricesRouter({
       });
       save();
 
-      const quotaSkipped = provider === 'alphavantage' && !syncWarning ? Math.max(0, assets.filter((asset) => alphaSymbolFor(asset)).length - candidates.length) : 0;
+      const quotaSkipped = provider === 'alphavantage' && !syncWarning ? Math.max(0, openAssets.filter((asset) => alphaSymbolFor(asset)).length - candidates.length) : 0;
       res.json({
         ok: true,
         stored,
         requested: candidates.length,
         unmatched,
         manualKept,
+        skippedNoPosition: noPositionSkipped,
         source,
         requestsRemaining: provider === 'alphavantage' ? Math.max(0, ALPHA_VANTAGE_DAILY_LIMIT - alphaRequestsToday()) : null,
-        message: `Saved ${stored} dated end-of-day prices. ${unmatched.length} symbols had no matching quote${quotaSkipped ? `; ${quotaSkipped} skipped due to the daily request limit` : ''}${manualKept ? `; kept ${manualKept} manual price${manualKept === 1 ? '' : 's'} unchanged` : ''}${syncWarning ? `; stopped early: ${syncWarning}` : ''}.`,
+        message: `Saved ${stored} dated end-of-day prices. ${unmatched.length} symbols had no matching quote${quotaSkipped ? `; ${quotaSkipped} skipped due to the daily request limit` : ''}${manualKept ? `; kept ${manualKept} manual price${manualKept === 1 ? '' : 's'} unchanged` : ''}${noPositionSkipped ? `; skipped ${noPositionSkipped} asset${noPositionSkipped === 1 ? '' : 's'} with no open position` : ''}${syncWarning ? `; stopped early: ${syncWarning}` : ''}.`,
       });
     } catch (error) {
       res.status(error.status || 502).json({ error: error.publicMessage || 'Marketstack request failed. Check the API key, plan quota, and ticker symbols.' });

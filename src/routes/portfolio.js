@@ -331,4 +331,8 @@ function createPortfolioRouter({ db, fetchFxRates: fetchFx = fetchFxRates } = {}
   return router;
 }
 
-module.exports = { createPortfolioRouter, heldQuantity };
+function isHeld(db, assetId) {
+  return heldQuantity(db, assetId) > EPSILON;
+}
+
+module.exports = { createPortfolioRouter, heldQuantity, isHeld };
