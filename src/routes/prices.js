@@ -103,17 +103,18 @@ function createPricesRouter({
     if (!symbol) return res.status(400).json({ error: 'Add an Alpha Vantage symbol to this asset first: edit the asset and search for its listing.' });
     const key = alphaKey();
     if (!key) return res.status(400).json({ error: 'Alpha Vantage is not configured. Add ALPHA_VANTAGE_API_KEY to the local .env file and restart the app.' });
-    if (!consumeAlphaVantageRequest()) return res.status(429).json({ error: 'Alpha Vantage daily request limit reached. Try again tomorrow.' });
     try {
-      await waitForAlphaVantageSlot();
-      const quote = await fetchAlphaPriceOnDate(symbol, date, key);
-      if (!quote) return res.status(502).json({ error: `Alpha Vantage has no daily history for ${symbol} on or before ${date}.` });
+      // The fetcher gates (quota) and paces (12s) each provider call it makes: one request for
+      // recent dates, a second weekly request when the free daily window doesn't reach back far enough.
+      const quote = await fetchAlphaPriceOnDate(symbol, date, key, { gate: consumeAlphaVantageRequest, pace: waitForAlphaVantageSlot });
+      if (!quote) return res.status(502).json({ error: `Alpha Vantage has no price history for ${symbol} on or before ${date}.` });
       res.json({
         price: Number(quote.close),
         date: quote.date,
         symbol,
         currency: asset.alphavantage_currency || asset.currency,
-        source: 'Alpha Vantage · end-of-day',
+        exact: quote.exact !== false,
+        source: quote.exact === false ? 'Alpha Vantage · weekly close' : 'Alpha Vantage · end-of-day',
         requestsRemaining: Math.max(0, ALPHA_VANTAGE_DAILY_LIMIT - alphaRequestsToday()),
       });
     } catch (error) {

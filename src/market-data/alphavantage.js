@@ -43,17 +43,36 @@ async function fetchLatestPrice(symbol, apiKey) {
   return { symbol: raw['01. symbol'] || symbol, close, date };
 }
 
-// Daily history: the close of the last trading day on or before `date` (market-closed days
-// resolve to the previous close, matching how the app values holdings on any given date).
-async function fetchPriceOnDate(symbol, date, apiKey) {
-  const payload = await request({ function: 'TIME_SERIES_DAILY', symbol, outputsize: 'full' }, apiKey);
-  const series = payload['Time Series (Daily)'];
+function pickLatestOnOrBefore(series, date) {
   if (!series) return null;
   const chosen = Object.keys(series).filter((day) => day <= date).sort().at(-1);
-  if (!chosen) return null;
-  const close = Number(series[chosen]['4. close']);
-  if (!(close > 0)) return null;
-  return { symbol, close, date: chosen };
+  const close = chosen ? Number(series[chosen]['4. close']) : NaN;
+  return chosen && close > 0 ? { date: chosen, close } : null;
+}
+
+// The close on or before `date`, matching how the app values holdings on any given day.
+// Free-tier reality (verified against the live API): exact daily closes only reach back
+// ~100 trading days (outputsize=full is a premium feature), so dates beyond that fall
+// back to the free weekly series (~2 years). Each weekly key is that week's last trading
+// day, so the fallback is still a real close on or before the date — just Friday's, not
+// the exact day's. gate() and pace() let the caller meter and space every provider call.
+async function fetchPriceOnDate(symbol, date, apiKey, { gate = () => true, pace = async () => {} } = {}) {
+  const quotaError = () => {
+    const error = new Error('Alpha Vantage daily request limit reached. Try again tomorrow.');
+    error.status = 429;
+    error.publicMessage = error.message;
+    return error;
+  };
+  if (!gate()) throw quotaError();
+  await pace();
+  const daily = await request({ function: 'TIME_SERIES_DAILY', symbol, outputsize: 'compact' }, apiKey);
+  const exact = pickLatestOnOrBefore(daily['Time Series (Daily)'], date);
+  if (exact) return { symbol, ...exact, exact: true };
+  if (!gate()) throw quotaError();
+  await pace();
+  const weekly = await request({ function: 'TIME_SERIES_WEEKLY', symbol }, apiKey);
+  const approx = pickLatestOnOrBefore(weekly['Weekly Time Series'], date);
+  return approx ? { symbol, ...approx, exact: false } : null;
 }
 
 async function searchSymbols(keywords, apiKey) {

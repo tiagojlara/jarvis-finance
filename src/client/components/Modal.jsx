@@ -47,7 +47,9 @@ export default function Modal({ type, data, existing, onClose, onSave }) {
     try {
       const quote = await api(`market-data/quote?assetId=${encodeURIComponent(form.asset_id)}&date=${encodeURIComponent(form.date || today())}`);
       setForm((current) => ({ ...current, price: String(quote.price), source: quote.source, date: quote.date }));
-      setFetchNote(`Filled ${quote.price} ${quote.currency} from ${quote.symbol}'s close on ${quote.date}${quote.date !== form.date ? ' (market was closed on your chosen date)' : ''}; press Save record to store it. ${quote.requestsRemaining} of 25 provider requests remain today.`);
+      const reason = quote.exact === false ? 'approximate: the free daily window ends ~5 months back, so the last weekly close before it was used'
+        : quote.date !== form.date ? 'market was closed on your chosen date, previous close used' : '';
+      setFetchNote(`Filled ${quote.price} ${quote.currency} from ${quote.symbol}'s close on ${quote.date}${reason ? ` (${reason})` : ''}; press Save record to store it. ${quote.requestsRemaining} of 25 provider requests remain today.`);
     } catch (e) { setError(e.message); } finally { setFetching(false); }
   };
   const submit = async (event) => {

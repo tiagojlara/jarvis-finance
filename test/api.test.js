@@ -252,7 +252,11 @@ test('dated quote fetch can fill past prices for assets that are no longer held'
   t.after(() => { if (previousKey === undefined) delete process.env.ALPHA_VANTAGE_API_KEY; else process.env.ALPHA_VANTAGE_API_KEY = previousKey; });
   const calls = [];
   const { request, close } = await startServer({
-    fetchAlphaPriceOnDate: async (symbol, date) => { calls.push({ symbol, date }); return { symbol, close: 11.5, date: '2024-03-15' }; },
+    fetchAlphaPriceOnDate: async (symbol, date, key, { gate } = {}) => {
+      calls.push({ symbol, date });
+      if (gate && !gate()) throw Object.assign(new Error('limit reached'), { status: 429 });
+      return { symbol, close: 11.5, date: '2024-03-15', exact: true };
+    },
   });
   t.after(close);
   const { accountId, assetId } = await seedAccountAndAsset(request);
@@ -266,6 +270,8 @@ test('dated quote fetch can fill past prices for assets that are no longer held'
   assert.deepEqual(calls, [{ symbol: 'EXIT', date: '2024-03-20' }]);
   assert.equal(quote.payload.price, 11.5);
   assert.equal(quote.payload.date, '2024-03-15', 'the actual trading day fetched is reported');
+  assert.equal(quote.payload.exact, true);
+  assert.equal(quote.payload.requestsRemaining, 24, 'the fetcher consumes quota through the router gate');
   assert.equal((await request('prices')).payload.length, 0, 'the quote endpoint is read-only; saving stays with the form');
 
   assert.equal((await request(`market-data/quote?assetId=${assetId}&date=2099-01-01`)).status, 400, 'future dates are rejected');
