@@ -2,35 +2,42 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { api, escapeCsv, getHomeValue } from './api.js';
 import Sidebar from './components/Sidebar.jsx';
 import Modal from './components/Modal.jsx';
-import { Activity, Overview, Planning, Portfolio, Settings } from './components/Views.jsx';
+import { Activity, Dividends, NetWorth, Overview, Planning, Portfolio, Settings } from './components/Views.jsx';
 
 const initialSettings = { homeCurrency: 'EUR', fxProvider: 'frankfurter', currentAge: 35, retirementAge: 65, monthlyContribution: 500, monthlyIncome: 2500, oneTimeContribution: 0, monthlyWithdrawal: 0, inflation: .02, scenarios: [.03, .05, .07] };
-const titles = { overview: 'Overview', portfolio: 'Portfolio', activity: 'Activity', planning: 'Retirement plan', settings: 'Settings & backup' };
-const emptyData = { accounts: [], assets: [], transactions: [], prices: [], dividends: [], fx_rates: [], summary: { holdings: [], valueByCurrency: {}, costByCurrency: {}, dividendIncomeByCurrency: {} } };
+const titles = { overview: 'Overview', portfolio: 'Portfolio', networth: 'Net worth', activity: 'Activity', dividends: 'Dividends', planning: 'Retirement plan', settings: 'Settings & backup' };
+const emptyData = { accounts: [], assets: [], transactions: [], prices: [], dividends: [], cash_balances: [], physical_assets: [], physical_valuations: [], liabilities: [], liability_balances: [], fx_rates: [], summary: { holdings: [], valueByCurrency: {}, costByCurrency: {}, dividendIncomeByCurrency: {} } };
 
 export default function App() {
   const [page, setPage] = useState('overview'); const [data, setData] = useState(emptyData); const [settings, setSettings] = useState(initialSettings);
   const [modal, setModal] = useState(null); const [editing, setEditing] = useState(null); const [busy, setBusy] = useState(true); const [error, setError] = useState('');
   const refresh = useCallback(async () => {
     try {
-      const [summary, accounts, assets, transactions, prices, dividends, fx_rates, saved] = await Promise.all([
-        'summary', 'accounts', 'assets', 'transactions', 'prices', 'dividends', 'fx_rates', 'settings',
+      const [summary, accounts, assets, transactions, prices, dividends, cash_balances, physical_assets, physical_valuations, liabilities, liability_balances, fx_rates, saved] = await Promise.all([
+        'summary', 'accounts', 'assets', 'transactions', 'prices', 'dividends', 'cash_balances', 'physical_assets', 'physical_valuations', 'liabilities', 'liability_balances', 'fx_rates', 'settings',
       ].map((path) => api(path)));
-      setData({ accounts, assets, transactions, prices, dividends, fx_rates, summary: summary.summary });
-      setSettings({ ...initialSettings, ...saved }); setError('');
+      setData({ accounts, assets, transactions, prices, dividends, cash_balances, physical_assets, physical_valuations, liabilities, liability_balances, fx_rates, summary: summary.summary });
+      const storedCurrency = typeof saved.homeCurrency === 'string' ? saved.homeCurrency : saved.homeCurrency?.homeCurrency;
+      const homeCurrency = ['EUR', 'SEK', 'USD', 'BRL'].includes(storedCurrency) ? storedCurrency : initialSettings.homeCurrency;
+      setSettings({ ...initialSettings, ...saved, homeCurrency });
+      // Repair settings written by the old overview currency selector, which nested this value.
+      if (saved.homeCurrency !== homeCurrency) await api('settings', { method: 'PUT', body: JSON.stringify({ homeCurrency }) });
+      setError('');
     } catch (e) { setError(`Could not reach the local database: ${e.message}`); }
     finally { setBusy(false); }
   }, []);
   useEffect(() => { refresh(); }, [refresh]);
   const homeValue = useMemo(() => getHomeValue(data.summary.holdings, data.fx_rates, settings.homeCurrency), [data, settings.homeCurrency]);
   const addRecord = (type) => {
-    if (type !== 'account' && type !== 'asset' && data.accounts.length === 0) { setError(''); setPage('portfolio'); setEditing(null); setModal('account'); return; }
+    if (!['account', 'asset', 'physicalAsset', 'liability'].includes(type) && data.accounts.length === 0 && !['valuation', 'liabilityBalance'].includes(type)) { setError(''); setPage('portfolio'); setEditing(null); setModal('account'); return; }
     if (['price', 'dividend'].includes(type) && data.assets.length === 0) { setError(''); setPage('portfolio'); setEditing(null); setModal('asset'); return; }
+    if (type === 'valuation' && data.physical_assets.length === 0) { setError(''); setPage('networth'); setEditing(null); setModal('physicalAsset'); return; }
+    if (type === 'liabilityBalance' && data.liabilities.length === 0) { setError(''); setPage('networth'); setEditing(null); setModal('liability'); return; }
     setError(''); setEditing(null); setModal(type);
   };
   const editRecord = (type, record) => { setError(''); setEditing(record); setModal(type); };
   const saveRecord = async (type, payload, id) => {
-    const endpoint = { account: 'accounts', asset: 'assets', transaction: 'transactions', price: 'prices', dividend: 'dividends' }[type];
+    const endpoint = { account: 'accounts', asset: 'assets', transaction: 'transactions', price: 'prices', dividend: 'dividends', cashBalance: 'cash_balances', physicalAsset: 'physical_assets', valuation: 'physical_valuations', liability: 'liabilities', liabilityBalance: 'liability_balances' }[type];
     await api(id ? `${endpoint}/${id}` : endpoint, { method: id ? 'PUT' : 'POST', body: JSON.stringify(payload) }); setModal(null); setEditing(null); await refresh();
   };
   const deleteRecord = async (endpoint, record) => {
@@ -62,7 +69,9 @@ export default function App() {
   const content = {
     overview: <Overview data={data} homeValue={homeValue} settings={settings} navigate={setPage} onHomeCurrency={(homeCurrency) => updateSettings({ homeCurrency })}/>,
     portfolio: <Portfolio data={data} onAdd={addRecord} onDelete={deleteRecord} onEdit={editRecord}/>,
+    networth: <NetWorth data={data} settings={settings} homeValue={homeValue} onAdd={addRecord} onDelete={deleteRecord} onEdit={editRecord}/>,
     activity: <Activity data={data} onAdd={addRecord} onDelete={deleteRecord}/>,
+    dividends: <Dividends data={data} onAdd={addRecord} onDelete={deleteRecord} onEdit={editRecord}/>,
     planning: <Planning settings={settings} setSettings={updateSettings} homeValue={homeValue}/>,
     settings: <Settings data={data} settings={settings} onHomeCurrency={updateSettings} onDelete={deleteRecord} onRefresh={refresh}/>,
   };

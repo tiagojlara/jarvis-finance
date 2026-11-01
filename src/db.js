@@ -9,6 +9,11 @@ const TABLE_FIELDS = {
   prices: ['asset_id', 'date', 'price', 'currency', 'source'],
   dividends: ['asset_id', 'account_id', 'date', 'amount', 'currency', 'shares', 'notes'],
   fx_rates: ['date', 'base', 'quote', 'rate', 'source'],
+  cash_balances: ['account_id', 'asset_id', 'date', 'balance', 'currency', 'notes'],
+  physical_assets: ['name', 'type', 'purchase_date', 'purchase_price', 'currency', 'notes'],
+  physical_valuations: ['physical_asset_id', 'date', 'value', 'currency', 'source', 'notes'],
+  liabilities: ['name', 'type', 'physical_asset_id', 'original_amount', 'currency', 'interest_rate', 'notes'],
+  liability_balances: ['liability_id', 'date', 'balance', 'notes'],
 };
 
 // Order matters: parents before children for inserts, children before parents for deletes.
@@ -22,6 +27,13 @@ CREATE TABLE IF NOT EXISTS transactions(id INTEGER PRIMARY KEY, account_id INTEG
 CREATE TABLE IF NOT EXISTS prices(id INTEGER PRIMARY KEY, asset_id INTEGER NOT NULL REFERENCES assets(id), date TEXT NOT NULL, price REAL NOT NULL, currency TEXT NOT NULL CHECK(currency IN ('EUR','SEK','USD','BRL')), source TEXT NOT NULL DEFAULT 'Manual');
 CREATE TABLE IF NOT EXISTS dividends(id INTEGER PRIMARY KEY, asset_id INTEGER NOT NULL REFERENCES assets(id), account_id INTEGER REFERENCES accounts(id), date TEXT NOT NULL, amount REAL NOT NULL, currency TEXT NOT NULL CHECK(currency IN ('EUR','SEK','USD','BRL')), shares REAL, notes TEXT DEFAULT '');
 CREATE TABLE IF NOT EXISTS fx_rates(id INTEGER PRIMARY KEY, date TEXT NOT NULL, base TEXT NOT NULL CHECK(base IN ('EUR','SEK','USD','BRL')), quote TEXT NOT NULL CHECK(quote IN ('EUR','SEK','USD','BRL')), rate REAL NOT NULL CHECK(rate > 0), source TEXT NOT NULL DEFAULT 'Manual', UNIQUE(date,base,quote));
+CREATE TABLE IF NOT EXISTS cash_balances(id INTEGER PRIMARY KEY, account_id INTEGER NOT NULL REFERENCES accounts(id), asset_id INTEGER REFERENCES assets(id), date TEXT NOT NULL, balance REAL NOT NULL CHECK(balance >= 0), currency TEXT NOT NULL CHECK(currency IN ('EUR','SEK','USD','BRL')), notes TEXT DEFAULT '');
+CREATE TABLE IF NOT EXISTS physical_assets(id INTEGER PRIMARY KEY, name TEXT NOT NULL, type TEXT NOT NULL CHECK(type IN ('Property','Vehicle','Other')), purchase_date TEXT, purchase_price REAL CHECK(purchase_price IS NULL OR purchase_price >= 0), currency TEXT NOT NULL CHECK(currency IN ('EUR','SEK','USD','BRL')), notes TEXT DEFAULT '');
+CREATE TABLE IF NOT EXISTS physical_valuations(id INTEGER PRIMARY KEY, physical_asset_id INTEGER NOT NULL REFERENCES physical_assets(id), date TEXT NOT NULL, value REAL NOT NULL CHECK(value >= 0), currency TEXT NOT NULL CHECK(currency IN ('EUR','SEK','USD','BRL')), source TEXT NOT NULL DEFAULT 'Manual estimate', notes TEXT DEFAULT '');
+CREATE TABLE IF NOT EXISTS liabilities(id INTEGER PRIMARY KEY, name TEXT NOT NULL, type TEXT NOT NULL CHECK(type IN ('Mortgage','Vehicle finance','Personal loan','Other')), physical_asset_id INTEGER REFERENCES physical_assets(id), original_amount REAL NOT NULL CHECK(original_amount >= 0), currency TEXT NOT NULL CHECK(currency IN ('EUR','SEK','USD','BRL')), interest_rate REAL CHECK(interest_rate IS NULL OR interest_rate >= 0), notes TEXT DEFAULT '');
+CREATE TABLE IF NOT EXISTS liability_balances(id INTEGER PRIMARY KEY, liability_id INTEGER NOT NULL REFERENCES liabilities(id), date TEXT NOT NULL, balance REAL NOT NULL CHECK(balance >= 0), notes TEXT DEFAULT '');
+CREATE UNIQUE INDEX IF NOT EXISTS idx_cash_balance_account_date ON cash_balances(account_id,date) WHERE asset_id IS NULL;
+CREATE UNIQUE INDEX IF NOT EXISTS idx_cash_balance_asset_date ON cash_balances(account_id,asset_id,date) WHERE asset_id IS NOT NULL;
 CREATE TABLE IF NOT EXISTS settings(key TEXT PRIMARY KEY, value TEXT NOT NULL);
 `;
 

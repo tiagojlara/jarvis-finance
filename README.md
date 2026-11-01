@@ -2,7 +2,7 @@
 
 A local-first personal investment tracker and retirement planning tool. It is for tracking and scenario exploration, not financial advice, and it does not trade.
 
-The interface uses React components, Vite for the local development server and production bundle, and Tailwind CSS v4 through its Vite plugin. The API remains a local Express server backed by SQLite.
+The interface uses React components, Recharts for responsive interactive charts, Vite for the local development server and production bundle, and Tailwind CSS v4 through its Vite plugin. The API remains a local Express server backed by SQLite.
 
 ## Requirements and setup
 
@@ -33,4 +33,11 @@ Scenario values are illustrative nominal estimates using monthly contributions a
 
 ## Scope notes
 
-The first version supports accounts, assets, buy/sell and cash-flow transactions, dated manual or optional Alpha Vantage or Marketstack prices, dividends, manual FX rates, basic allocation, projections, backup/restore, and CSV export. Brokerage integrations, taxes, bonds' accrued interest, corporate actions, and full cash-account reconciliation are not included. Use demo data only if you explicitly select it; it is labeled and removable through the account/asset and activity screens.
+The app supports accounts, assets, buy/sell and cash-flow transactions, dated account or Cash-asset balance snapshots without trades, dated manual or optional Alpha Vantage or Marketstack prices, a dedicated dividend history page, manual FX rates, allocation, responsive Recharts visualizations, ROI and selectable history periods, projections, backup/restore, and CSV export. Brokerage integrations, taxes, bonds' accrued interest, corporate actions, and full cash-account reconciliation are not included. Use demo data only if you explicitly select it; it is labeled and removable through the account/asset and activity screens.
+
+
+Cash balances are dated snapshots linked either to an account directly or to a Cash-type asset. Use one tracking method per account to avoid double-counting; a cash asset must use the account currency. The latest snapshot per account/cash asset contributes to current value, and historical charts use the most recent snapshot on or before each date. Period return is the change between the first and last portfolio valuations in the selected range; it is not adjusted for deposits or withdrawals. Unrealized ROI is unrealized gain divided by remaining cost basis, excluding cash and realized gains.
+
+## Physical assets and loans
+
+Use **Net worth** to record property, vehicles, and other physical assets, then add dated manual valuations. Loans and mortgages are separate records and can link to a physical asset; record dated remaining-balance snapshots as you receive statements. The net-worth estimate combines the current investment/cash total with the latest physical valuations and subtracts latest recorded loan balances. It uses stored FX rates as of each record date and indicates when prices or rates are missing. These amounts are manual snapshots, not appraisals, amortization schedules, or live lender balances. Linked loans must use the physical asset's currency so the displayed asset equity is meaningful. Physical assets and debt do not enter investment ROI or retirement projections. These tables are included in full JSON backups.

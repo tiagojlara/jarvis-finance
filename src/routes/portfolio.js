@@ -21,6 +21,30 @@ function heldQuantity(db, assetId, excludeTransactionId = null) {
   return rows.reduce((total, row) => total + (row.kind === 'buy' ? 1 : -1) * Number(row.quantity || 0), 0);
 }
 
+function cashBalanceError(db, data, excludeId = null) {
+  const accountId = Number(data.account_id);
+  const assetId = data.asset_id == null || data.asset_id === '' ? null : Number(data.asset_id);
+  if (!Number.isInteger(accountId) || !(Number(data.balance) >= 0) || !/^\d{4}-\d{2}-\d{2}$/.test(String(data.date || ''))) {
+    return 'Choose an account and date, and enter a non-negative balance.';
+  }
+  const account = db.prepare('SELECT currency FROM accounts WHERE id=?').get(accountId);
+  if (!account) return 'Choose an existing account.';
+  if (assetId !== null) {
+    const asset = db.prepare("SELECT currency,type FROM assets WHERE id=?").get(assetId);
+    if (!asset || asset.type !== 'Cash') return 'A linked asset must have the Cash asset type.';
+    if (asset.currency !== data.currency) return 'Cash balance currency must match the linked cash asset currency.';
+    if (db.prepare('SELECT 1 FROM cash_balances WHERE account_id=? AND asset_id IS NULL AND id!=COALESCE(?, -1) LIMIT 1').get(accountId, excludeId)) {
+      return 'This account already uses account-level cash balances. Remove those entries before switching to a cash asset.';
+    }
+  } else {
+    if (account.currency !== data.currency) return 'Cash balance currency must match the account currency.';
+    if (db.prepare('SELECT 1 FROM cash_balances WHERE account_id=? AND asset_id IS NOT NULL AND id!=COALESCE(?, -1) LIMIT 1').get(accountId, excludeId)) {
+      return 'This account already tracks cash as an asset. Remove those entries before switching to account-level balances.';
+    }
+  }
+  return null;
+}
+
 function readSummaryData(db) {
   return {
     accounts: db.prepare('SELECT * FROM accounts').all(),
@@ -28,6 +52,7 @@ function readSummaryData(db) {
     transactions: db.prepare('SELECT * FROM transactions ORDER BY date, id').all(),
     prices: db.prepare(LATEST_PRICES_SQL).all(),
     dividends: db.prepare('SELECT * FROM dividends').all(),
+    cash_balances: db.prepare('SELECT * FROM cash_balances ORDER BY date,id').all(),
   };
 }
 
@@ -128,6 +153,21 @@ function createPortfolioRouter({ db, fetchFxRates: fetchFx = fetchFxRates } = {}
       return res.status(400).json({ error: 'Dividend amount must be positive' });
     }
 
+    if (table === 'cash_balances') {
+      const error = cashBalanceError(db, data);
+      if (error) return res.status(400).json({ error });
+    }
+
+    if (table === 'physical_valuations') {
+      const asset = db.prepare('SELECT currency FROM physical_assets WHERE id=?').get(data.physical_asset_id);
+      if (!asset || asset.currency !== data.currency || !(Number(data.value) >= 0) || !/^\d{4}-\d{2}-\d{2}$/.test(String(data.date || ''))) return res.status(400).json({ error: 'Choose an asset, use its currency, and enter a valid date and non-negative value.' });
+    }
+    if (table === 'liabilities' && data.physical_asset_id) {
+      const asset = db.prepare('SELECT currency FROM physical_assets WHERE id=?').get(data.physical_asset_id);
+      if (!asset || asset.currency !== data.currency) return res.status(400).json({ error: 'A linked loan must use the physical asset currency. Leave it unlinked if it uses a different currency.' });
+    }
+    if (table === 'liability_balances' && (!db.prepare('SELECT 1 FROM liabilities WHERE id=?').get(data.liability_id) || !(Number(data.balance) >= 0) || !/^\d{4}-\d{2}-\d{2}$/.test(String(data.date || '')))) return res.status(400).json({ error: 'Choose a loan and enter a valid date and non-negative balance.' });
+
     const keys = fields.filter((k) => data[k] !== undefined);
     if (!keys.length) return res.status(400).json({ error: 'No valid fields supplied' });
     try {
@@ -163,6 +203,38 @@ function createPortfolioRouter({ db, fetchFxRates: fetchFx = fetchFxRates } = {}
       }
     }
 
+    if (table === 'cash_balances') {
+      const existing = db.prepare('SELECT * FROM cash_balances WHERE id=?').get(id);
+      if (existing) {
+        const updates = Object.fromEntries(fields.filter((k) => req.body[k] !== undefined).map((k) => [k, req.body[k]]));
+        const error = cashBalanceError(db, { ...existing, ...updates }, Number(id));
+        if (error) return res.status(400).json({ error });
+      }
+    }
+
+    if (table === 'physical_valuations' || table === 'liability_balances') {
+      const existing = db.prepare(`SELECT * FROM ${table} WHERE id=?`).get(id);
+      if (existing) {
+        const updates = Object.fromEntries(fields.filter((k) => req.body[k] !== undefined).map((k) => [k, req.body[k]]));
+        const merged = { ...existing, ...updates };
+        if (!/^\d{4}-\d{2}-\d{2}$/.test(String(merged.date || '')) || !(Number(table === 'physical_valuations' ? merged.value : merged.balance) >= 0)) return res.status(400).json({ error: 'Enter a valid date and non-negative value.' });
+        if (table === 'physical_valuations') {
+          const asset = db.prepare('SELECT currency FROM physical_assets WHERE id=?').get(merged.physical_asset_id);
+          if (!asset || asset.currency !== merged.currency) return res.status(400).json({ error: 'Valuation currency must match the physical asset currency.' });
+        } else if (!db.prepare('SELECT 1 FROM liabilities WHERE id=?').get(merged.liability_id)) return res.status(400).json({ error: 'Choose an existing loan.' });
+      }
+    }
+    if (table === 'liabilities') {
+      const existing = db.prepare('SELECT * FROM liabilities WHERE id=?').get(id);
+      if (existing) {
+        const merged = { ...existing, ...Object.fromEntries(fields.filter((k) => req.body[k] !== undefined).map((k) => [k, req.body[k]])) };
+        if (merged.physical_asset_id) {
+          const asset = db.prepare('SELECT currency FROM physical_assets WHERE id=?').get(merged.physical_asset_id);
+          if (!asset || asset.currency !== merged.currency) return res.status(400).json({ error: 'A linked loan must use the physical asset currency. Leave it unlinked if it uses a different currency.' });
+        }
+      }
+    }
+
     const keys = fields.filter((k) => req.body[k] !== undefined);
     if (!keys.length) return res.status(400).json({ error: 'No valid fields supplied' });
     try {
@@ -176,12 +248,14 @@ function createPortfolioRouter({ db, fetchFxRates: fetchFx = fetchFxRates } = {}
   router.delete('/api/:table/:id', (req, res) => {
     const { table, id } = req.params;
     if (!ALLOWED_TABLES.has(table)) return res.sendStatus(404);
-    if (table === 'accounts' && db.prepare('SELECT 1 FROM transactions WHERE account_id=? LIMIT 1').get(id)) {
-      return res.status(400).json({ error: 'This account has transaction history. Remove its transactions first, or keep the account for historical records.' });
+    if (table === 'accounts' && ['transactions','cash_balances'].some((child) => db.prepare(`SELECT 1 FROM ${child} WHERE account_id=? LIMIT 1`).get(id))) {
+      return res.status(400).json({ error: 'This account has history. Remove its transactions and cash balances first, or keep the account for historical records.' });
     }
-    if (table === 'assets' && ['transactions', 'prices', 'dividends'].some((t) => db.prepare(`SELECT 1 FROM ${t} WHERE asset_id=? LIMIT 1`).get(id))) {
+    if (table === 'assets' && ['transactions', 'prices', 'dividends', 'cash_balances'].some((t) => db.prepare(`SELECT 1 FROM ${t} WHERE asset_id=? LIMIT 1`).get(id))) {
       return res.status(400).json({ error: 'This asset has related records. Remove its transactions, prices, and dividends first, or keep it for historical records.' });
     }
+    if (table === 'physical_assets' && (db.prepare('SELECT 1 FROM physical_valuations WHERE physical_asset_id=? LIMIT 1').get(id) || db.prepare('SELECT 1 FROM liabilities WHERE physical_asset_id=? LIMIT 1').get(id))) return res.status(400).json({ error: 'This physical asset has valuation or loan records. Remove those records first, or keep the asset for history.' });
+    if (table === 'liabilities' && db.prepare('SELECT 1 FROM liability_balances WHERE liability_id=? LIMIT 1').get(id)) return res.status(400).json({ error: 'This loan has balance history. Remove those records first, or keep the loan for history.' });
     try {
       db.prepare(`DELETE FROM ${table} WHERE id=?`).run(id);
       res.json({ ok: true });
@@ -193,7 +267,7 @@ function createPortfolioRouter({ db, fetchFxRates: fetchFx = fetchFxRates } = {}
   router.post('/api/fx/sync', async (req, res) => {
     const provider = req.body?.provider || 'frankfurter';
     if (!['frankfurter', 'ecb'].includes(provider)) return res.status(400).json({ error: 'Unsupported FX provider' });
-    const activityDates = db.prepare('SELECT date FROM transactions UNION SELECT date FROM prices UNION SELECT date FROM dividends ORDER BY date').all().map((row) => row.date);
+    const activityDates = db.prepare('SELECT date FROM transactions UNION SELECT date FROM prices UNION SELECT date FROM dividends UNION SELECT date FROM cash_balances ORDER BY date').all().map((row) => row.date);
     if (!activityDates.length) return res.json({ ok: true, stored: 0, dates: 0, message: 'Add transactions, prices, or dividends first.' });
     const from = activityDates[0];
     const to = new Date().toISOString().slice(0, 10);

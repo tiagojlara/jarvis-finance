@@ -81,6 +81,53 @@ test('latest price prefers the manual entry when two share the same date', async
   assert.equal(holding.price_source, 'Manual');
 });
 
+test('account cash balance contributes to portfolio value without creating a transaction', async (t) => {
+  const { request, close } = await startServer();
+  t.after(close);
+  const { accountId } = await seedAccountAndAsset(request);
+  const saved = await request('cash_balances', { method: 'POST', body: { account_id: accountId, date: '2024-03-01', balance: 1250, currency: 'EUR', notes: 'Cash account value' } });
+  assert.equal(saved.status, 200, saved.payload?.error);
+
+  const summary = (await request('summary')).payload;
+  assert.equal(summary.transactions.length, 0, 'cash snapshots do not create buy/sell activity');
+  assert.equal(summary.summary.valueByCurrency.EUR, 1250);
+  const cash = summary.summary.holdings.find((holding) => holding.is_cash_balance);
+  assert.equal(cash.current_value, 1250);
+  assert.equal(cash.price_source, 'Manual cash balance');
+});
+
+test('cash asset snapshots are supported and cannot be mixed with account-level balances', async (t) => {
+  const { request, close } = await startServer();
+  t.after(close);
+  const { accountId } = await seedAccountAndAsset(request);
+  const cashAsset = await request('assets', { method: 'POST', body: { name: 'USD cash', type: 'Cash', currency: 'USD' } });
+  const saved = await request('cash_balances', { method: 'POST', body: { account_id: accountId, asset_id: cashAsset.payload.id, date: '2024-03-01', balance: 800, currency: 'USD' } });
+  assert.equal(saved.status, 200, saved.payload?.error);
+  const mixed = await request('cash_balances', { method: 'POST', body: { account_id: accountId, date: '2024-04-01', balance: 500, currency: 'EUR' } });
+  assert.equal(mixed.status, 400);
+  assert.match(mixed.payload.error, /cash as an asset/i);
+});
+
+test('physical assets, valuations, and linked loan balance history are backed up locally', async (t) => {
+  const { request, close } = await startServer();
+  t.after(close);
+  const home = await request('physical_assets', { method: 'POST', body: { name: 'Home', type: 'Property', purchase_date: '2020-01-01', purchase_price: 250000, currency: 'EUR', notes: '' } });
+  assert.equal(home.status, 200, home.payload?.error);
+  const valuation = await request('physical_valuations', { method: 'POST', body: { physical_asset_id: home.payload.id, date: '2024-01-01', value: 300000, currency: 'EUR', source: 'Manual estimate' } });
+  assert.equal(valuation.status, 200, valuation.payload?.error);
+  const wrongCurrency = await request('physical_valuations', { method: 'POST', body: { physical_asset_id: home.payload.id, date: '2024-02-01', value: 310000, currency: 'USD', source: 'Manual estimate' } });
+  assert.equal(wrongCurrency.status, 400);
+  const loan = await request('liabilities', { method: 'POST', body: { name: 'Mortgage', type: 'Mortgage', physical_asset_id: home.payload.id, original_amount: 200000, currency: 'EUR', interest_rate: 3.5, notes: '' } });
+  assert.equal(loan.status, 200, loan.payload?.error);
+  const balance = await request('liability_balances', { method: 'POST', body: { liability_id: loan.payload.id, date: '2024-01-01', balance: 180000, notes: '' } });
+  assert.equal(balance.status, 200, balance.payload?.error);
+  const backup = await request('backup');
+  assert.equal(backup.payload.data.physical_assets.length, 1);
+  assert.equal(backup.payload.data.physical_valuations.length, 1);
+  assert.equal(backup.payload.data.liabilities.length, 1);
+  assert.equal(backup.payload.data.liability_balances.length, 1);
+});
+
 test('FX sync refreshes provider rates on re-sync but never overwrites Manual rows', async (t) => {
   let rates = [{ date: '2024-01-03', base: 'EUR', quote: 'USD', rate: 1.1 }];
   const { request, close } = await startServer({ fetchFxRates: async () => rates.map((row) => ({ ...row })) });
@@ -115,12 +162,15 @@ test('backup and restore round-trips without foreign key errors', async (t) => {
   t.after(close);
   const { accountId, assetId } = await seedAccountAndAsset(request);
   await request('transactions', { method: 'POST', body: { account_id: accountId, asset_id: assetId, kind: 'buy', date: '2024-01-02', quantity: 10, unit_price: 10, currency: 'EUR' } });
+  await request('cash_balances', { method: 'POST', body: { account_id: accountId, date: '2024-03-01', balance: 50, currency: 'EUR' } });
   const backup = (await request('backup')).payload;
   assert.equal(backup.data.transactions.length, 1);
+  assert.equal(backup.data.cash_balances.length, 1);
 
   const restored = await request('restore', { method: 'POST', body: backup });
   assert.equal(restored.status, 200, restored.payload?.error);
   const summary = await request('summary');
   assert.equal(summary.payload.transactions.length, 1);
+  assert.equal(summary.payload.cash_balances.length, 1);
   assert.equal(summary.payload.summary.holdings.find((h) => h.id === assetId).quantity, 10);
 });
