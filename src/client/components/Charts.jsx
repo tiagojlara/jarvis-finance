@@ -26,6 +26,27 @@ export function PortfolioValueChart({ data = [], currency = 'EUR' }) {
   </ResponsiveContainer></div>;
 }
 
+// Hover card for the stacked income chart: lists only the assets that actually paid
+// in the hovered month (zero entries are dropped), with a total when stacked.
+function StackedIncomeTooltip({ active, payload, label, currency }) {
+  if (!active || !payload?.length) return null;
+  const rows = payload.filter((entry) => Number(entry.value) > 0);
+  if (!rows.length) return null;
+  const total = rows.reduce((sum, entry) => sum + Number(entry.value), 0);
+  return <div style={{ ...tooltipStyle, background: '#fff', padding: '9px 11px', minWidth: 150, boxShadow: '0 6px 18px #20312d14' }}>
+    <div style={{ fontWeight: 700, marginBottom: 5 }}>{shortDate(label)}</div>
+    {rows.map((entry) => <div key={entry.dataKey} style={{ display: 'flex', alignItems: 'center', gap: 7, marginTop: 3, fontSize: 11 }}>
+      <i style={{ display: 'inline-block', width: 8, height: 8, borderRadius: '50%', background: entry.color }}/>
+      <span style={{ color: '#71807a' }}>{entry.name}</span>
+      <b style={{ marginLeft: 'auto' }}>{money(Number(entry.value), currency)}</b>
+    </div>)}
+    {rows.length > 1 && <div style={{ display: 'flex', gap: 7, marginTop: 6, paddingTop: 5, borderTop: '1px solid #eef0ed', fontSize: 11 }}>
+      <span style={{ color: '#71807a' }}>Total</span>
+      <b style={{ marginLeft: 'auto' }}>{money(total, currency)}</b>
+    </div>}
+  </div>;
+}
+
 // Stacked monthly income: `series` is one { key, name } segment per asset, and each
 // data row is { month, [key]: amount }. The full bar height stays the month total.
 // Assets that paid nothing in the current window are dropped from the bars and the
@@ -42,7 +63,7 @@ export function DividendChart({ data = [], series = [], currency = 'EUR' }) {
       <CartesianGrid stroke="#edf0ec" strokeDasharray="3 4" vertical={false}/>
       <XAxis dataKey="month" tickFormatter={shortDate} minTickGap={24} tick={axisStyle} axisLine={false} tickLine={false}/>
       <YAxis tickFormatter={(value) => new Intl.NumberFormat(undefined, { notation: 'compact', maximumFractionDigits: 1 }).format(value)} width={52} tick={axisStyle} axisLine={false} tickLine={false}/>
-      <Tooltip labelFormatter={shortDate} formatter={(value, name) => [money(Number(value), currency), name]} contentStyle={tooltipStyle}/>
+      <Tooltip content={<StackedIncomeTooltip currency={currency}/>} cursor={{ fill: '#f2f6f2' }}/>
       {visible.length > 1 && <Legend iconType="circle" wrapperStyle={{ fontSize: 10 }}/>}
       {segments.map((segment, index) => (paid(segment) ? (
         <Bar key={segment.key} dataKey={segment.key} name={segment.name} stackId="income"
