@@ -115,6 +115,7 @@ export function Activity({ data, onAdd, onDelete }) {
 
 export function Dividends({ data, onAdd, onDelete, onEdit }) {
   const [assetId, setAssetId] = useState('');
+  const [period, setPeriod] = useState('1Y');
   const payments = data.dividends.filter((payment) => !assetId || String(payment.asset_id) === assetId).sort((a, b) => b.date.localeCompare(a.date));
   const totals = payments.reduce((result, payment) => { result[payment.currency] = (result[payment.currency] || 0) + Number(payment.amount); return result; }, {});
   const monthly = {};
@@ -123,10 +124,35 @@ export function Dividends({ data, onAdd, onDelete, onEdit }) {
     const month = payment.date.slice(0, 7);
     monthly[payment.currency][month] = (monthly[payment.currency][month] || 0) + Number(payment.amount);
   }
+  // Continuous month axis for the chart: every month in the selected period gets one bar,
+  // including months without payments (zero), so gaps in income are visible as real calendar time.
+  const currentMonth = today().slice(0, 7);
+  const chartStart = (() => {
+    if (period === 'ALL') return null;
+    const date = new Date();
+    if (period === 'YTD') return `${date.getFullYear()}-01`;
+    date.setMonth(date.getMonth() - (period === '1Y' ? 11 : period === '3Y' ? 35 : 59));
+    return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+  })();
+  const monthRange = (from, to) => {
+    const months = [];
+    let [year, month] = from.split('-').map(Number);
+    const [endYear, endMonth] = to.split('-').map(Number);
+    while (year < endYear || (year === endYear && month <= endMonth)) {
+      months.push(`${year}-${String(month).padStart(2, '0')}`);
+      month += 1;
+      if (month > 12) { month = 1; year += 1; }
+    }
+    return months;
+  };
   return <><div className="metric-grid">{currencies.filter((currency) => totals[currency] != null).map((currency) => <Metric key={currency} label={`DIVIDENDS · ${currency}`} value={money(totals[currency], currency)} detail={`${payments.filter((payment) => payment.currency === currency).length} recorded payments`}/>)}{!payments.length && <Metric label="DIVIDENDS RECEIVED" value="—" detail="Actual payments only"/>}</div>
     <div className="toolbar"><select aria-label="Filter dividends by asset" value={assetId} onChange={(event) => setAssetId(event.target.value)}><option value="">All assets</option>{data.assets.map((asset) => <option key={asset.id} value={asset.id}>{asset.name}</option>)}</select><div className="toolbar-spacer"/><button className="button button-primary" onClick={() => onAdd('dividend')}>＋ Record dividend</button></div>
     <p className="panel-note">Charts use recorded dividend payments only; they do not include estimates or projected income. Amounts remain in their original currencies.</p>
-    <div className="content-grid">{Object.entries(monthly).map(([currency, monthRows]) => <Section key={currency} title={`Monthly income · ${currency}`}><DividendChart currency={currency} data={Object.entries(monthRows).sort(([a], [b]) => a.localeCompare(b)).map(([month, amount]) => ({ month, amount }))}/></Section>)}</div>
+    <div className="period-controls" role="group" aria-label="Dividend chart period">{['YTD', '1Y', '3Y', '5Y', 'ALL'].map((option) => <button type="button" key={option} aria-pressed={period === option} className={period === option ? 'period-button selected' : 'period-button'} onClick={() => setPeriod(option)}>{option === 'ALL' ? 'All' : option}</button>)}</div>
+    <div className="content-grid">{Object.entries(monthly).map(([currency, monthRows]) => {
+      const months = monthRange(chartStart || Object.keys(monthRows).sort()[0], currentMonth);
+      return <Section key={currency} title={`Monthly income · ${currency}`}><DividendChart currency={currency} data={months.map((month) => ({ month, amount: monthRows[month] || 0 }))}/></Section>;
+    })}</div>
     <Section title="Dividend payments"><DataTable key={assetId || 'all'} pageSize={20} empty="No dividend payments recorded. Add a payment to begin a history." rows={payments} onEdit={onEdit ? (payment) => onEdit('dividend', payment) : undefined} onDelete={(payment) => onDelete('dividends', payment)} columns={[{ key: 'date', label: 'PAYMENT DATE' }, { key: 'asset', label: 'HOLDING', render: (payment) => data.assets.find((asset) => asset.id === payment.asset_id)?.name || 'Asset' }, { key: 'account', label: 'ACCOUNT', render: (payment) => data.accounts.find((account) => account.id === payment.account_id)?.name || '—' }, { key: 'shares', label: 'SHARES HELD', render: (payment) => payment.shares ?? '—' }, { key: 'amount', label: 'AMOUNT', render: (payment) => money(payment.amount, payment.currency) }, { key: 'notes', label: 'NOTES' }]}/></Section>
   </>;
 }
