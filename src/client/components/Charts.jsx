@@ -26,15 +26,23 @@ export function PortfolioValueChart({ data = [], currency = 'EUR' }) {
   </ResponsiveContainer></div>;
 }
 
-export function DividendChart({ data = [], currency = 'EUR' }) {
+// Stacked monthly income: `series` is one { key, name } segment per asset, and each
+// data row is { month, [key]: amount }. The full bar height stays the month total.
+export function DividendChart({ data = [], series = [], currency = 'EUR' }) {
   if (!data.length) return <div className="empty-chart">Record dividend payments to see income history.</div>;
+  const segments = series.length ? series : [{ key: 'amount', name: 'Paid' }];
   return <div className="chart-frame"><ResponsiveContainer width="100%" height={250}>
     <BarChart data={data} margin={{ top: 8, right: 12, bottom: 0, left: 0 }}>
       <CartesianGrid stroke="#edf0ec" strokeDasharray="3 4" vertical={false}/>
       <XAxis dataKey="month" tickFormatter={shortDate} minTickGap={24} tick={axisStyle} axisLine={false} tickLine={false}/>
       <YAxis tickFormatter={(value) => new Intl.NumberFormat(undefined, { notation: 'compact', maximumFractionDigits: 1 }).format(value)} width={52} tick={axisStyle} axisLine={false} tickLine={false}/>
-      <Tooltip labelFormatter={shortDate} formatter={(value) => [money(Number(value), currency), 'Paid']} contentStyle={tooltipStyle}/>
-      <Bar dataKey="amount" fill="#2f6e5b" radius={[4, 4, 0, 0]} maxBarSize={36}/>
+      <Tooltip labelFormatter={shortDate} formatter={(value, name) => [money(Number(value), currency), name]} contentStyle={tooltipStyle}/>
+      {segments.length > 1 && <Legend iconType="circle" wrapperStyle={{ fontSize: 10 }}/>}
+      {segments.map((segment, index) => (
+        <Bar key={segment.key} dataKey={segment.key} name={segment.name} stackId="income"
+          fill={palette[index % palette.length]} maxBarSize={36}
+          radius={index === segments.length - 1 ? [4, 4, 0, 0] : undefined}/>
+      ))}
     </BarChart>
   </ResponsiveContainer></div>;
 }

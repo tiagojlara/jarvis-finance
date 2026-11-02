@@ -117,13 +117,6 @@ export function Dividends({ data, onAdd, onDelete, onEdit }) {
   const [assetId, setAssetId] = useState('');
   const [period, setPeriod] = useState('1Y');
   const payments = data.dividends.filter((payment) => !assetId || String(payment.asset_id) === assetId).sort((a, b) => b.date.localeCompare(a.date));
-  const totals = payments.reduce((result, payment) => { result[payment.currency] = (result[payment.currency] || 0) + Number(payment.amount); return result; }, {});
-  const monthly = {};
-  for (const payment of payments) {
-    monthly[payment.currency] ||= {};
-    const month = payment.date.slice(0, 7);
-    monthly[payment.currency][month] = (monthly[payment.currency][month] || 0) + Number(payment.amount);
-  }
   // Continuous month axis for the chart: every month in the selected period gets one bar,
   // including months without payments (zero), so gaps in income are visible as real calendar time.
   const currentMonth = today().slice(0, 7);
@@ -145,13 +138,29 @@ export function Dividends({ data, onAdd, onDelete, onEdit }) {
     }
     return months;
   };
-  return <><div className="metric-grid">{currencies.filter((currency) => totals[currency] != null).map((currency) => <Metric key={currency} label={`DIVIDENDS · ${currency}`} value={money(totals[currency], currency)} detail={`${payments.filter((payment) => payment.currency === currency).length} recorded payments`}/>)}{!payments.length && <Metric label="DIVIDENDS RECEIVED" value="—" detail="Actual payments only"/>}</div>
+  const monthOf = (payment) => payment.date.slice(0, 7);
+  // The metric cards and the charts share one window: the top totals follow the selected period.
+  const windowPayments = payments.filter((payment) => (!chartStart || monthOf(payment) >= chartStart) && monthOf(payment) <= currentMonth);
+  const totals = windowPayments.reduce((result, payment) => { result[payment.currency] = (result[payment.currency] || 0) + Number(payment.amount); return result; }, {});
+  const periodText = { YTD: 'year to date', '1Y': 'last 12 months', '3Y': 'last 3 years', '5Y': 'last 5 years', ALL: 'all time' }[period];
+  const assetName = (id) => data.assets.find((asset) => asset.id === id)?.name || 'Asset';
+  const chartCurrencies = currencies.filter((currency) => payments.some((payment) => payment.currency === currency));
+  return <><div className="metric-grid">{chartCurrencies.map((currency) => <Metric key={currency} label={`DIVIDENDS · ${currency}`} value={money(totals[currency] || 0, currency)} detail={`${windowPayments.filter((payment) => payment.currency === currency).length} payments · ${periodText}`}/>)}{!payments.length && <Metric label="DIVIDENDS RECEIVED" value="—" detail="Actual payments only"/>}</div>
     <div className="toolbar"><select aria-label="Filter dividends by asset" value={assetId} onChange={(event) => setAssetId(event.target.value)}><option value="">All assets</option>{data.assets.map((asset) => <option key={asset.id} value={asset.id}>{asset.name}</option>)}</select><div className="toolbar-spacer"/><button className="button button-primary" onClick={() => onAdd('dividend')}>＋ Record dividend</button></div>
-    <p className="panel-note">Charts use recorded dividend payments only; they do not include estimates or projected income. Amounts remain in their original currencies.</p>
+    <p className="panel-note">Charts use recorded dividend payments only; they do not include estimates or projected income. Amounts remain in their original currencies. The totals above and the charts follow the selected period; each monthly bar is divided by asset.</p>
     <div className="period-controls" role="group" aria-label="Dividend chart period">{['YTD', '1Y', '3Y', '5Y', 'ALL'].map((option) => <button type="button" key={option} aria-pressed={period === option} className={period === option ? 'period-button selected' : 'period-button'} onClick={() => setPeriod(option)}>{option === 'ALL' ? 'All' : option}</button>)}</div>
-    <div className="content-grid">{Object.entries(monthly).map(([currency, monthRows]) => {
-      const months = monthRange(chartStart || Object.keys(monthRows).sort()[0], currentMonth);
-      return <Section key={currency} title={`Monthly income · ${currency}`}><DividendChart currency={currency} data={months.map((month) => ({ month, amount: monthRows[month] || 0 }))}/></Section>;
+    <div className="content-grid">{chartCurrencies.map((currency) => {
+      const currencyPayments = payments.filter((payment) => payment.currency === currency);
+      // One stacked segment per asset; colors and legend stay stable across period switches.
+      const series = [...new Set(currencyPayments.map((payment) => payment.asset_id))].map((id) => ({ key: `asset-${id}`, name: assetName(id) }));
+      const months = monthRange(chartStart || currencyPayments.map(monthOf).sort()[0], currentMonth);
+      const rows = months.map((month) => ({ month, ...Object.fromEntries(series.map((segment) => [segment.key, 0])) }));
+      const rowByMonth = new Map(rows.map((row) => [row.month, row]));
+      for (const payment of currencyPayments) {
+        const row = rowByMonth.get(monthOf(payment)); // outside the window: not charted, not counted
+        if (row) row[`asset-${payment.asset_id}`] += Number(payment.amount);
+      }
+      return <Section key={currency} title={`Monthly income · ${currency}`}><DividendChart currency={currency} data={rows} series={series}/></Section>;
     })}</div>
     <Section title="Dividend payments"><DataTable key={assetId || 'all'} pageSize={20} empty="No dividend payments recorded. Add a payment to begin a history." rows={payments} onEdit={onEdit ? (payment) => onEdit('dividend', payment) : undefined} onDelete={(payment) => onDelete('dividends', payment)} columns={[{ key: 'date', label: 'PAYMENT DATE' }, { key: 'asset', label: 'HOLDING', render: (payment) => data.assets.find((asset) => asset.id === payment.asset_id)?.name || 'Asset' }, { key: 'account', label: 'ACCOUNT', render: (payment) => data.accounts.find((account) => account.id === payment.account_id)?.name || '—' }, { key: 'shares', label: 'SHARES HELD', render: (payment) => payment.shares ?? '—' }, { key: 'amount', label: 'AMOUNT', render: (payment) => money(payment.amount, payment.currency) }, { key: 'notes', label: 'NOTES' }]}/></Section>
   </>;
