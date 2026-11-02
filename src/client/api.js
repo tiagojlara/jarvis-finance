@@ -3,7 +3,16 @@ export const api = async (path, options = {}) => {
   const response = await fetch(`/api/${path}`, {
     headers: { 'Content-Type': 'application/json' }, ...options,
   });
-  const data = await response.json();
+  const text = await response.text();
+  let data;
+  try { data = JSON.parse(text); }
+  catch {
+    // An HTML body means the request never reached a matching API route — typically a
+    // server process older than the UI. Say so instead of leaking a JSON parse error.
+    throw new Error(response.status === 404
+      ? 'The API server does not have this endpoint — it is probably older than the interface. Restart the server (npm run dev or npm start) and try again.'
+      : `The server returned an unexpected response (HTTP ${response.status}).`);
+  }
   if (!response.ok) throw new Error(data.error || response.statusText);
   return data;
 };

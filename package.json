@@ -8,7 +8,7 @@
   },
   "scripts": {
     "start": "node server.js",
-    "dev": "concurrently -k \"node server.js\" \"vite --host 127.0.0.1\"",
+    "dev": "concurrently -k \"node --watch server.js\" \"vite --host 127.0.0.1\"",
     "build": "vite build",
     "test": "node --test"
   },
