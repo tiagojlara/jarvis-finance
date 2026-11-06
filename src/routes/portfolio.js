@@ -5,9 +5,9 @@ const { fetchFxRates } = require('../market-data/frankfurter');
 
 const ALLOWED_TABLES = new Set(TABLE_ORDER);
 
-// Quota bookkeeping written by the market-data router. The browser loads and re-saves the
-// settings blob, so these must never round-trip through it (a stale write would refill the
-// daily Alpha Vantage allowance).
+// Legacy quota bookkeeping keys left in existing databases from the removed Alpha Vantage
+// integration. The browser loads and re-saves the settings blob, so these stay hidden and
+// ignored: no dead provider state round-trips into the UI or gets reset by stale writes.
 const SERVER_ONLY_SETTINGS = new Set(['alphavantage_usage', 'alphavantage_last_request_at']);
 
 // One row per asset: the newest date, preferring Manual over provider rows on the same date.
@@ -335,4 +335,4 @@ function isHeld(db, assetId) {
   return heldQuantity(db, assetId) > EPSILON;
 }
 
-module.exports = { createPortfolioRouter, heldQuantity, isHeld };
+module.exports = { createPortfolioRouter, heldQuantity, isHeld, summaryResponse };
