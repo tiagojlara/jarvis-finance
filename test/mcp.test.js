@@ -106,7 +106,7 @@ test('MCP handshake lists read and write tools', async (t) => {
   const init = await client.initialize();
   assert.equal(init.result.serverInfo.name, 'jarvis-finance');
   const names = await client.listTools();
-  for (const expected of ['get_summary', 'list_assets', 'list_transactions', 'list_prices', 'list_fx_rates', 'get_net_worth', 'save_price', 'save_fx_rate']) {
+  for (const expected of ['get_summary', 'list_assets', 'list_transactions', 'list_prices', 'list_fx_rates', 'get_net_worth', 'save_price', 'save_fx_rate', 'save_dividend']) {
     assert.ok(names.includes(expected), `missing tool ${expected}`);
   }
 });
@@ -162,6 +162,43 @@ test('save_fx_rate upserts one row per date and pair', async (t) => {
 
   const message = await client.expectToolError('save_fx_rate', { date: '2026-11-03', base: 'EUR', quote: 'EUR', rate: 1 });
   assert.match(message, /different currencies/);
+});
+
+test('save_dividend records payments, is idempotent, and refuses silent overwrites', async (t) => {
+  const client = await startMcp();
+  t.after(client.close);
+  await client.initialize();
+  const asset = await seedAsset(client);
+  const accountId = (await client.api('accounts')).payload[0].id;
+
+  const saved = await client.callTool('save_dividend', { asset_id: asset.id, date: '2026-11-04', amount: 12.5, account_id: accountId, notes: 'Nordnet settlement' });
+  assert.equal(saved.action, 'inserted');
+  assert.equal(saved.dividend.currency, 'EUR'); // defaults to the asset currency
+  assert.equal(saved.dividend.notes, 'Nordnet settlement');
+
+  const again = await client.callTool('save_dividend', { asset_id: asset.id, date: '2026-11-04', amount: 12.5 });
+  assert.equal(again.action, 'exists');
+  assert.equal(again.dividend.id, saved.dividend.id);
+  assert.equal(client.db.prepare('SELECT COUNT(*) AS n FROM dividends').get().n, 1, 're-saving the same payment must not duplicate it');
+
+  // A different amount for the same asset + date needs explicit confirmation...
+  const conflict = await client.expectToolError('save_dividend', { asset_id: asset.id, date: '2026-11-04', amount: 99 });
+  assert.match(conflict, /replace=true/);
+  const replaced = await client.callTool('save_dividend', { asset_id: asset.id, date: '2026-11-04', amount: 99, replace: true });
+  assert.equal(replaced.action, 'replaced');
+  assert.equal(replaced.dividend.amount, 99);
+  assert.equal(replaced.dividend.notes, 'Nordnet settlement', 'replace keeps untouched fields');
+  assert.equal(client.db.prepare('SELECT COUNT(*) AS n FROM dividends').get().n, 1, 'a correction updates the row in place');
+
+  const wrongCurrency = await client.expectToolError('save_dividend', { asset_id: asset.id, date: '2026-11-05', amount: 1, currency: 'USD' });
+  assert.match(wrongCurrency, /must match the asset currency/);
+  await client.expectToolError('save_dividend', { asset_id: 9999, date: '2026-11-05', amount: 1 });
+  await client.expectToolError('save_dividend', { asset_id: asset.id, date: '2026-11-05', amount: 1, account_id: 9999 });
+
+  const listed = await client.callTool('list_dividends', { asset_id: asset.id });
+  assert.equal(listed.length, 1);
+  const summary = await client.callTool('get_summary');
+  assert.equal(summary.dividendIncomeByCurrency.EUR, 99, 'the corrected dividend surfaces in the summary');
 });
 
 test('requests without a known session are rejected', async (t) => {

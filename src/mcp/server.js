@@ -1,6 +1,7 @@
 // MCP server for external agents (e.g. Nous Research Hermes Agent), served at /mcp.
-// Portfolio reads plus two writes: manual prices and manual FX rates — the same dated
-// entries the UI creates. No deletes, no restores, no settings writes.
+// Portfolio reads plus three writes: manual prices, manual FX rates, and dividend
+// registration — the same dated entries the UI creates. No deletes, no restores,
+// no settings writes. The cash-flow ledger is deliberately not exposed here.
 // Deliberately unauthenticated: everything runs locally and the Express app binds to
 // 127.0.0.1, so only this machine can reach it. See README "MCP server".
 const crypto = require('node:crypto');
@@ -194,6 +195,45 @@ function buildToolServer(db) {
       ON CONFLICT(date, base, quote) DO UPDATE SET rate = excluded.rate, source = 'Manual'`)
       .run({ date, base, quote, rate });
     return jsonContent({ fx_rate: db.prepare('SELECT * FROM fx_rates WHERE date = ? AND base = ? AND quote = ?').get(date, base, quote) });
+  });
+
+  server.registerTool('save_dividend', {
+    description: 'Record a dated actual dividend payment for an asset, like the UI dividend dialog. Record on the pay date with the settled amount. Currency defaults to (and must match) the asset currency. Idempotent: re-saving the same asset + date with the same amount returns the existing row instead of duplicating it. A DIFFERENT amount for an already-recorded asset + date is refused unless replace=true is passed after confirming the correction with the user.',
+    inputSchema: {
+      asset_id: z.number().int().positive(),
+      date: DATE,
+      amount: z.number().positive(),
+      account_id: z.number().int().positive().optional(),
+      currency: z.enum(CURRENCIES).optional(),
+      shares: z.number().positive().optional(),
+      notes: z.string().max(500).optional(),
+      replace: z.boolean().optional(),
+    },
+    annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+  }, async ({ asset_id, date, amount, account_id, currency, shares, notes, replace }) => {
+    const asset = db.prepare('SELECT name, currency FROM assets WHERE id = ?').get(asset_id);
+    if (!asset) return errorContent(`No asset with id ${asset_id}. Call list_assets to find ids.`);
+    if (currency && currency !== asset.currency) {
+      return errorContent(`Dividend currency must match the asset currency (${asset.currency} for "${asset.name}").`);
+    }
+    if (account_id && !db.prepare('SELECT 1 FROM accounts WHERE id = ?').get(account_id)) {
+      return errorContent(`No account with id ${account_id}. Call list_accounts to find ids.`);
+    }
+    const existing = db.prepare('SELECT * FROM dividends WHERE asset_id = ? AND date = ? ORDER BY id').get(asset_id, date);
+    if (existing) {
+      if (Number(existing.amount) === Number(amount) && !replace) {
+        return jsonContent({ action: 'exists', dividend: existing });
+      }
+      if (!replace) {
+        return errorContent(`A dividend for "${asset.name}" on ${date} is already recorded (id ${existing.id}, amount ${existing.amount} ${existing.currency}). Confirm with the user; to correct it, call again with replace=true, or edit/delete the row in the app UI.`);
+      }
+      db.prepare('UPDATE dividends SET account_id = ?, amount = ?, currency = ?, shares = ?, notes = ? WHERE id = ?')
+        .run(account_id ?? existing.account_id, amount, asset.currency, shares ?? existing.shares, notes ?? existing.notes, existing.id);
+      return jsonContent({ action: 'replaced', dividend: db.prepare('SELECT * FROM dividends WHERE id = ?').get(existing.id) });
+    }
+    const info = db.prepare('INSERT INTO dividends(asset_id, account_id, date, amount, currency, shares, notes) VALUES(?,?,?,?,?,?,?)')
+      .run(asset_id, account_id ?? null, date, amount, asset.currency, shares ?? null, notes ?? '');
+    return jsonContent({ action: 'inserted', dividend: db.prepare('SELECT * FROM dividends WHERE id = ?').get(info.lastInsertRowid) });
   });
 
   return server;

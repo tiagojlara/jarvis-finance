@@ -1,7 +1,7 @@
 ---
 name: jarvis-finance
-description: Query and maintain Tiago's local jarvis-finance portfolio via the jarvis MCP tools — holdings, transactions, dividends, FX rates, net worth, and recording manual prices or FX rates. Use when asked about the portfolio, assets, cash, dividends, or currency conversions.
-version: 1.0.0
+description: Query and maintain Tiago's local jarvis-finance portfolio via the jarvis MCP tools — holdings, transactions, dividends, FX rates, net worth, and recording manual prices, FX rates, or dividend payments. Use when asked about the portfolio, assets, cash, dividends, or currency conversions.
+version: 1.1.0
 platforms: [macos]
 metadata:
   hermes:
@@ -58,6 +58,30 @@ with `save_price`:
 - Fund NAVs publish T+1 (bryttid 15:00); the "latest" is usually yesterday's date. For same-day stock closes, check `regularMarketTime` vs Stockholm close (17:30 CET) before treating an intraday value as a close.
 - Pitfall: NAVs get recorded one day late easily (a NAV published on day X is day X-1's close). Verify the date column, not the publish date.
 - Batch backfills (>15 rows): don't spend one tool_call per row — POST JSON-RPC straight to the jarvis MCP endpoint (`http://127.0.0.1:3000/mcp`, streamable HTTP: initialize → notifications/initialized → tools/call `save_price`, tool names un-namespaced, Mcp-Session-Id header). See scratch pattern: assert each response's date/price, then read back with `list_prices`.
+
+## Recording dividends (`save_dividend`)
+
+`save_dividend` writes an actual dividend payment into the investment dividend ledger — the same
+rows the UI dividend dialog creates, and the same rows `list_dividends` reads back.
+
+- Params: `asset_id` + `date` + `amount` required; `account_id`, `shares`, `notes` optional.
+  Currency defaults to (and must match) the asset's own currency — do not convert before saving.
+  `asset_id`/`account_id` come from `list_assets`/`list_accounts`.
+- Idempotent per asset + date: re-saving the same amount returns `action: 'exists'` and creates
+  no duplicate — safe to retry after an unclear response.
+- A DIFFERENT amount for an already-recorded asset + date is refused: that row may be the user's
+  own entry. Ask first; after the user confirms the correction, re-call with `replace=true`
+  (it updates the row in place and keeps notes/shares unless you pass new ones).
+- Always verify by reading back with `list_dividends`, and mention the recorded date + amount.
+- Dividends live in the investment ledger ONLY: never also enter them into the app's Cash Flow
+  page (manual-only, not exposed over MCP) — that would double-count the income there.
+
+- Convention: record on the PAY date (when Nordnet settles), amount = the actual SEK settlement
+  from the user's Nordnet CSV/app — published per-share web figures (stockanalysis, fiscal.ai,
+  mfn.se) differ from Nordnet's settlement by ±1-2% because Nordnet converts EUR→SEK at its own
+  rate. Use web sources only to identify which dividend was paid (ex-date/pay-date/per-share);
+  ask the user for the settlement amount rather than estimating.
+- Cibus pays MONTHLY (ex-date ~25th/26th, pay ~3rd/8th); declared in EUR (~€0.07-0.08/share).
 
 ## Recording FX rates (`save_fx_rate`)
 
