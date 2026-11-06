@@ -186,7 +186,7 @@ export function CashFlow({ data, onAdd, onDelete, onEdit }) {
     .sort((a, b) => b.date.localeCompare(a.date) || b.id - a.id), [entries, monthEntries, scope, kindFilter, accountFilter, categoryFilter]);
   const currenciesInUse = Object.keys(totals).sort();
   return <>
-    <p className="panel-note">Cash flow is <b>recorded activity</b>: only the income and spending you enter here, in the same accounts your portfolio uses (brokerage, bank, card). It never changes your holdings, dividends, or net worth, and it is not a synced bank account — unrecorded payments simply are not shown. Totals stay per currency.</p>
+    <p className="panel-note">Cash flow is <b>recorded activity</b>: only the income and spending you recorded here or through an MCP agent, in the same accounts your portfolio uses (brokerage, bank, card). It never changes your holdings, dividends, or net worth, and it is not a synced bank account — unrecorded payments simply are not shown. Totals stay per currency.</p>
     <div className="toolbar">
       <button type="button" className="button button-quiet" onClick={() => setMonth(shiftMonth(month, -1))} aria-label="Previous month">‹</button>
       <input type="month" aria-label="Month" value={month} onChange={(event) => event.target.value && setMonth(event.target.value)}/>

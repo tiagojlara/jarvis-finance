@@ -395,4 +395,4 @@ function isHeld(db, assetId) {
   return heldQuantity(db, assetId) > EPSILON;
 }
 
-module.exports = { createPortfolioRouter, heldQuantity, isHeld, summaryResponse };
+module.exports = { createPortfolioRouter, heldQuantity, isHeld, summaryResponse, cashFlowEntryError, cashFlowCategoryError };

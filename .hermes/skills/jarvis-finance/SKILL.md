@@ -1,7 +1,7 @@
 ---
 name: jarvis-finance
-description: Query and maintain Tiago's local jarvis-finance portfolio via the jarvis MCP tools — holdings, transactions, dividends, FX rates, net worth, and recording manual prices, FX rates, or dividend payments. Use when asked about the portfolio, assets, cash, dividends, or currency conversions.
-version: 1.1.0
+description: Query and maintain Tiago's local jarvis-finance portfolio via the jarvis MCP tools — holdings, transactions, dividends, FX rates, net worth, the cash-flow income/spending ledger, and recording manual prices, FX rates, dividend payments, or cash-flow entries. Use when asked about the portfolio, assets, cash, dividends, income, spending, or currency conversions.
+version: 1.2.0
 platforms: [macos]
 metadata:
   hermes:
@@ -73,8 +73,11 @@ rows the UI dividend dialog creates, and the same rows `list_dividends` reads ba
   own entry. Ask first; after the user confirms the correction, re-call with `replace=true`
   (it updates the row in place and keeps notes/shares unless you pass new ones).
 - Always verify by reading back with `list_dividends`, and mention the recorded date + amount.
-- Dividends live in the investment ledger ONLY: never also enter them into the app's Cash Flow
-  page (manual-only, not exposed over MCP) — that would double-count the income there.
+- Dividends live in the investment ledger ONLY: never ALSO book the same payment with
+  `save_cash_flow_entry` — cash flow would double-count that income. Exception: if Tiago explicitly
+  wants his monthly cash income to include dividends in the Cash Flow view, use ONE `save_cash_flow_entry`
+  income row per month per currency (e.g. category "Dividends") summarising what `list_dividends`
+  already recorded, and say so in the answer — never one entry per payment.
 
 - Convention: record on the PAY date (when Nordnet settles), amount = the actual SEK settlement
   from the user's Nordnet CSV/app — published per-share web figures (stockanalysis, fiscal.ai,
@@ -82,6 +85,36 @@ rows the UI dividend dialog creates, and the same rows `list_dividends` reads ba
   rate. Use web sources only to identify which dividend was paid (ex-date/pay-date/per-share);
   ask the user for the settlement amount rather than estimating.
 - Cibus pays MONTHLY (ex-date ~25th/26th, pay ~3rd/8th); declared in EUR (~€0.07-0.08/share).
+
+## Cash-flow ledger (`get_cash_flow_summary`, `save_cash_flow_entry`, ...)
+
+The Cash Flow ledger is Tiago's own record of income and spending, kept separate from the
+investment ledger: entries never change holdings, dividends, or net worth, and portfolio
+activity never generates them. It shows only what was recorded — absence is not evidence of
+no spending. Tools: `get_cash_flow_summary` (one month, per currency), `list_cash_flow_transactions`
+(filtered, newest first), `list_cash_flow_categories`, `save_cash_flow_entry`,
+`update_cash_flow_entry`, `delete_cash_flow_entry`, `save_cash_flow_category`,
+`update_cash_flow_category`.
+
+- For "how much did I spend this month?" use `get_cash_flow_summary` with `month=YYYY-MM`
+  (defaults to the current month). Totals are per currency and NOT converted — never add
+  EUR and SEK amounts together; convert with `list_fx_rates` yourself and say you did.
+- `save_cash_flow_entry` needs `account_id`, `category_id`, `kind`, `date`, `amount`.
+  The entry's currency is ALWAYS the account's currency — pick the account that was actually
+  used (list_accounts; a SEK card means a SEK account entry, never convert first). The
+  category must be active and of the same kind as the entry; these are validated exactly like
+  the app's own form.
+- It is NOT idempotent: every call adds a row, and buying coffee twice in a day is legitimate.
+  After an unclear response, check `list_cash_flow_transactions` before re-saving — do not
+  assume a retry is safe.
+- Only save what Tiago (or a statement he provides) actually states: an amount, a date, and
+  which account paid. Confirm those before writing; never estimate or auto-categorize spending.
+- `update_cash_flow_entry` and `delete_cash_flow_entry` work by id from the list output.
+  Show the date/amount/category and get an explicit yes before deleting.
+- Categories: reuse the defaults when one fits (`list_cash_flow_categories`, which includes
+  `entry_count`); `save_cash_flow_category` is idempotent per name + kind. Retire a used
+  category with `update_cash_flow_category` `active=false` — used categories cannot change kind
+  and are never deleted, so history stays categorized.
 
 ## Recording FX rates (`save_fx_rate`)
 

@@ -15,7 +15,8 @@ const TABLE_FIELDS = {
   liabilities: ['name', 'type', 'physical_asset_id', 'original_amount', 'currency', 'interest_rate', 'notes'],
   liability_balances: ['liability_id', 'date', 'balance', 'notes'],
   // Cash-flow ledger: a separate domain from investment transactions. Rows here never
-  // feed holdings, dividends, or net-worth calculations — only the Cash Flow page reads them.
+  // feed holdings, dividends, or net-worth calculations — only the Cash Flow page and
+  // the MCP cash-flow tools read or write them.
   // It reuses the shared `accounts` table: the same accounts (brokerage, bank, card) that
   // hold investments also receive income and spending entries.
   cash_flow_categories: ['name', 'kind', 'active'],

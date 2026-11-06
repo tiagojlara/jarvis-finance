@@ -106,9 +106,14 @@ test('MCP handshake lists read and write tools', async (t) => {
   const init = await client.initialize();
   assert.equal(init.result.serverInfo.name, 'jarvis-finance');
   const names = await client.listTools();
-  for (const expected of ['get_summary', 'list_assets', 'list_transactions', 'list_prices', 'list_fx_rates', 'get_net_worth', 'save_price', 'save_fx_rate', 'save_dividend']) {
+  for (const expected of [
+    'get_summary', 'list_assets', 'list_transactions', 'list_prices', 'list_fx_rates', 'get_net_worth', 'save_price', 'save_fx_rate', 'save_dividend',
+    'list_cash_flow_categories', 'list_cash_flow_transactions', 'get_cash_flow_summary',
+    'save_cash_flow_entry', 'update_cash_flow_entry', 'delete_cash_flow_entry', 'save_cash_flow_category', 'update_cash_flow_category',
+  ]) {
     assert.ok(names.includes(expected), `missing tool ${expected}`);
   }
+  assert.equal(names.length, 20, 'the tool list should grow only with an intentional surface change');
 });
 
 test('save_price records and replaces only Manual rows', async (t) => {
@@ -199,6 +204,78 @@ test('save_dividend records payments, is idempotent, and refuses silent overwrit
   assert.equal(listed.length, 1);
   const summary = await client.callTool('get_summary');
   assert.equal(summary.dividendIncomeByCurrency.EUR, 99, 'the corrected dividend surfaces in the summary');
+});
+
+test('cash-flow MCP tools cover the whole ledger with the UI validation rules', async (t) => {
+  const client = await startMcp();
+  t.after(client.close);
+  await client.initialize();
+  await seedAsset(client); // creates the shared 'Brokerage' EUR account
+  const account = (await client.api('accounts')).payload[0];
+  const categories = await client.callTool('list_cash_flow_categories', { active_only: true });
+  const salary = categories.find((c) => c.name === 'Salary').id;
+  const food = categories.find((c) => c.name === 'Food').id;
+  const summaryBefore = JSON.stringify(await client.callTool('get_summary'));
+
+  // Entries take the currency of their account automatically.
+  const income = await client.callTool('save_cash_flow_entry', { account_id: account.id, category_id: salary, kind: 'income', date: '2026-11-01', amount: 2400, payee: 'Employer' });
+  assert.equal(income.action, 'inserted');
+  assert.equal(income.entry.currency, 'EUR');
+  const coffee = await client.callTool('save_cash_flow_entry', { account_id: account.id, category_id: food, kind: 'expense', date: '2026-11-03', amount: 4.5 });
+  const coffeeAgain = await client.callTool('save_cash_flow_entry', { account_id: account.id, category_id: food, kind: 'expense', date: '2026-11-03', amount: 4.5 });
+  assert.notEqual(coffeeAgain.entry.id, coffee.entry.id, 'same-day repeats are legitimate and always insert a new row');
+
+  // The same guards the REST routes enforce: unknown account, category kind mismatch.
+  await client.expectToolError('save_cash_flow_entry', { account_id: 9999, category_id: food, kind: 'expense', date: '2026-11-04', amount: 10 });
+  const wrongKind = await client.expectToolError('save_cash_flow_entry', { account_id: account.id, category_id: food, kind: 'income', date: '2026-11-04', amount: 10 });
+  assert.match(wrongKind, /records expense/);
+
+  // Monthly summary: per-currency totals and per-category breakdown.
+  const month = await client.callTool('get_cash_flow_summary', { month: '2026-11' });
+  assert.equal(month.entries, 3);
+  assert.deepEqual(month.totals_by_currency, { EUR: { income: 2400, expense: 9, net: 2391 } });
+  assert.equal(month.spending_by_category[0].name, 'Food');
+  assert.equal(month.spending_by_category[0].total, 9);
+  assert.equal(month.spending_by_category[0].entries, 2);
+  const emptyMonth = await client.callTool('get_cash_flow_summary', { month: '2026-10' });
+  assert.deepEqual(emptyMonth.totals_by_currency, {});
+
+  // Filtering, partial edits, and re-validation of the merged row.
+  const expenses = await client.callTool('list_cash_flow_transactions', { kind: 'expense', date_from: '2026-11-03' });
+  assert.equal(expenses.length, 2);
+  const edited = await client.callTool('update_cash_flow_entry', { id: coffee.entry.id, amount: 6.25, description: 'airport coffee' });
+  assert.equal(edited.entry.amount, 6.25);
+  assert.equal(edited.entry.description, 'airport coffee');
+  assert.equal(edited.entry.payee, '', 'untouched fields survive the edit');
+  const flip = await client.expectToolError('update_cash_flow_entry', { id: coffee.entry.id, kind: 'income' });
+  assert.match(flip, /records expense/, 'an edit cannot flip an expense under an expense category');
+
+  // Categories: creation is idempotent; renames clash-check; kinds pin once used.
+  const rent = await client.callTool('save_cash_flow_category', { name: 'Rent', kind: 'expense' });
+  assert.equal(rent.action, 'created');
+  const rentAgain = await client.callTool('save_cash_flow_category', { name: 'Rent', kind: 'expense' });
+  assert.equal(rentAgain.action, 'exists');
+  assert.equal(rentAgain.category.id, rent.category.id);
+  const renameClash = await client.expectToolError('update_cash_flow_category', { id: rent.category.id, name: 'Food' });
+  assert.match(renameClash, /already exists/);
+  const rekind = await client.expectToolError('update_cash_flow_category', { id: food, kind: 'income' });
+  assert.match(rekind, /cannot change/);
+
+  // Deactivation is the soft removal: new entries reject it, history stays.
+  const deactivated = await client.callTool('update_cash_flow_category', { id: rent.category.id, active: false });
+  assert.equal(deactivated.category.active, 0);
+  const blocked = await client.expectToolError('save_cash_flow_entry', { account_id: account.id, category_id: rent.category.id, kind: 'expense', date: '2026-11-05', amount: 900 });
+  assert.match(blocked, /deactivated/);
+
+  // Deleting entries is the one ledger MCP may prune; counts update accordingly.
+  const deleted = await client.callTool('delete_cash_flow_entry', { id: coffeeAgain.entry.id });
+  assert.equal(deleted.action, 'deleted');
+  await client.expectToolError('delete_cash_flow_entry', { id: 9999 });
+  const listed = await client.callTool('list_cash_flow_categories');
+  assert.equal(listed.find((c) => c.name === 'Food').entry_count, 1);
+
+  // Isolation: none of this touches holdings, dividends, or the portfolio summary.
+  assert.equal(JSON.stringify(await client.callTool('get_summary')), summaryBefore);
 });
 
 test('requests without a known session are rejected', async (t) => {
