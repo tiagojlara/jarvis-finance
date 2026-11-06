@@ -4,6 +4,7 @@ const pages = [
   ['overview', '◫', 'Overview'], ['portfolio', '▤', 'Portfolio'],
   ['networth', '⌂', 'Net worth'],
   ['activity', '↕', 'Activity'], ['dividends', '◌', 'Dividends'],
+  ['cashflow', '⇄', 'Cash flow'],
   ['planning', '⌁', 'Retirement plan'],
   ['settings', '⚙', 'Settings & backup'],
 ];

@@ -1,6 +1,6 @@
 const express = require('express');
 const calc = require('../calculations');
-const { TABLE_FIELDS, TABLE_ORDER, CHILD_FIRST } = require('../db');
+const { TABLE_FIELDS, TABLE_ORDER, CHILD_FIRST, seedCashFlowCategories } = require('../db');
 const { fetchFxRates } = require('../market-data/frankfurter');
 
 const ALLOWED_TABLES = new Set(TABLE_ORDER);
@@ -47,6 +47,32 @@ function cashBalanceError(db, data, excludeId = null) {
       return 'This account already tracks cash as an asset. Remove those entries before switching to account-level balances.';
     }
   }
+  return null;
+}
+
+// Cash-flow ledger rules. The investment `transactions` table is untouched by all of this:
+// a cash-flow entry is purely the user's record of income/spending, never a portfolio movement.
+function cashFlowEntryError(db, data) {
+  if (!['income', 'expense'].includes(data.kind)) return 'Cash-flow type must be income or expense.';
+  if (!(Number(data.amount) > 0)) return 'Cash-flow amount must be greater than zero.';
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(String(data.date || ''))) return 'Enter a valid date (YYYY-MM-DD).';
+  const account = db.prepare('SELECT currency FROM accounts WHERE id=?').get(data.account_id);
+  if (!account) return 'Choose an existing account.';
+  if (account.currency !== data.currency) return 'Cash-flow currency must match the account currency.';
+  const category = db.prepare('SELECT name,kind,active FROM cash_flow_categories WHERE id=?').get(data.category_id);
+  if (!category) return 'Choose an existing category.';
+  if (!category.active) return 'That category is deactivated. Choose an active category.';
+  if (category.kind !== data.kind) return `The category "${category.name}" records ${category.kind}. Use a ${data.kind} category or change the entry type.`;
+  return null;
+}
+
+// Called with the fully merged fields (POST body, or existing row + update on PUT),
+// so name and kind are always present here.
+function cashFlowCategoryError(db, data, excludeId = null) {
+  if (!['income', 'expense'].includes(data.kind)) return 'Category type must be income or expense.';
+  if (!String(data.name || '').trim()) return 'Category name is required.';
+  if (db.prepare('SELECT 1 FROM cash_flow_categories WHERE name=? AND kind=? AND id != COALESCE(?, -1) LIMIT 1')
+    .get(data.name, data.kind, excludeId)) return 'A category with that name and type already exists.';
   return null;
 }
 
@@ -111,6 +137,10 @@ function createPortfolioRouter({ db, fetchFxRates: fetchFx = fetchFxRates } = {}
       }
       db.prepare('DELETE FROM settings').run();
       for (const row of (backup.settings || [])) db.prepare('INSERT INTO settings(key,value) VALUES(?,?)').run(row.key, row.value);
+      // Backups taken before the cash-flow feature have no cash-flow keys at all. The loop above
+      // inserted nothing, so restore the default categories too (only if empty) and the ledger
+      // stays usable right away instead of waiting for the next app start.
+      seedCashFlowCategories(db);
     });
     try {
       restore();
@@ -184,6 +214,15 @@ function createPortfolioRouter({ db, fetchFxRates: fetchFx = fetchFxRates } = {}
     }
     if (table === 'liability_balances' && (!db.prepare('SELECT 1 FROM liabilities WHERE id=?').get(data.liability_id) || !(Number(data.balance) >= 0) || !/^\d{4}-\d{2}-\d{2}$/.test(String(data.date || '')))) return res.status(400).json({ error: 'Choose a loan and enter a valid date and non-negative balance.' });
 
+    if (table === 'cash_flow_transactions') {
+      const error = cashFlowEntryError(db, data);
+      if (error) return res.status(400).json({ error });
+    }
+    if (table === 'cash_flow_categories') {
+      const error = cashFlowCategoryError(db, data);
+      if (error) return res.status(400).json({ error });
+    }
+
     const keys = fields.filter((k) => data[k] !== undefined);
     if (!keys.length) return res.status(400).json({ error: 'No valid fields supplied' });
     try {
@@ -211,8 +250,8 @@ function createPortfolioRouter({ db, fetchFxRates: fetchFx = fetchFxRates } = {}
     if (table === 'accounts' && req.body.currency) {
       const prior = db.prepare('SELECT currency FROM accounts WHERE id=?').get(id);
       if (prior && prior.currency !== req.body.currency
-        && ['transactions', 'cash_balances', 'dividends'].some((t) => db.prepare(`SELECT 1 FROM ${t} WHERE account_id=? LIMIT 1`).get(id))) {
-        return res.status(400).json({ error: 'Currency cannot be changed after transactions, cash balances, or dividends have been recorded for this account.' });
+        && ['transactions', 'cash_balances', 'dividends', 'cash_flow_transactions'].some((t) => db.prepare(`SELECT 1 FROM ${t} WHERE account_id=? LIMIT 1`).get(id))) {
+        return res.status(400).json({ error: 'Currency cannot be changed after transactions, cash balances, dividends, or cash-flow entries have been recorded for this account.' });
       }
     }
 
@@ -270,6 +309,26 @@ function createPortfolioRouter({ db, fetchFxRates: fetchFx = fetchFxRates } = {}
       }
     }
 
+    if (table === 'cash_flow_transactions') {
+      const existing = db.prepare('SELECT * FROM cash_flow_transactions WHERE id=?').get(id);
+      if (existing) {
+        const merged = { ...existing, ...Object.fromEntries(fields.filter((k) => req.body[k] !== undefined).map((k) => [k, req.body[k]])) };
+        const error = cashFlowEntryError(db, merged);
+        if (error) return res.status(400).json({ error });
+      }
+    }
+    if (table === 'cash_flow_categories') {
+      const existing = db.prepare('SELECT * FROM cash_flow_categories WHERE id=?').get(id);
+      if (existing) {
+        const merged = { ...existing, ...Object.fromEntries(fields.filter((k) => req.body[k] !== undefined).map((k) => [k, req.body[k]])) };
+        // Re-typing a category would orphan its entries on the wrong side of the ledger.
+        if (merged.kind !== existing.kind && db.prepare('SELECT 1 FROM cash_flow_transactions WHERE category_id=? LIMIT 1').get(id)) {
+          return res.status(400).json({ error: 'This category already has entries. Deactivate it and create a new one instead of changing its type.' });
+        }
+        const error = cashFlowCategoryError(db, merged, Number(id));
+        if (error) return res.status(400).json({ error });
+      }
+    }
     const keys = fields.filter((k) => req.body[k] !== undefined);
     if (!keys.length) return res.status(400).json({ error: 'No valid fields supplied' });
     try {
@@ -283,14 +342,15 @@ function createPortfolioRouter({ db, fetchFxRates: fetchFx = fetchFxRates } = {}
   router.delete('/api/:table/:id', (req, res) => {
     const { table, id } = req.params;
     if (!ALLOWED_TABLES.has(table)) return res.sendStatus(404);
-    if (table === 'accounts' && ['transactions','cash_balances'].some((child) => db.prepare(`SELECT 1 FROM ${child} WHERE account_id=? LIMIT 1`).get(id))) {
-      return res.status(400).json({ error: 'This account has history. Remove its transactions and cash balances first, or keep the account for historical records.' });
+    if (table === 'accounts' && ['transactions','cash_balances','cash_flow_transactions'].some((child) => db.prepare(`SELECT 1 FROM ${child} WHERE account_id=? LIMIT 1`).get(id))) {
+      return res.status(400).json({ error: 'This account has history. Remove its transactions, cash balances, or cash-flow entries first, or keep the account for historical records.' });
     }
     if (table === 'assets' && ['transactions', 'prices', 'dividends', 'cash_balances'].some((t) => db.prepare(`SELECT 1 FROM ${t} WHERE asset_id=? LIMIT 1`).get(id))) {
       return res.status(400).json({ error: 'This asset has related records. Remove its transactions, prices, and dividends first, or keep it for historical records.' });
     }
     if (table === 'physical_assets' && (db.prepare('SELECT 1 FROM physical_valuations WHERE physical_asset_id=? LIMIT 1').get(id) || db.prepare('SELECT 1 FROM liabilities WHERE physical_asset_id=? LIMIT 1').get(id))) return res.status(400).json({ error: 'This physical asset has valuation or loan records. Remove those records first, or keep the asset for history.' });
     if (table === 'liabilities' && db.prepare('SELECT 1 FROM liability_balances WHERE liability_id=? LIMIT 1').get(id)) return res.status(400).json({ error: 'This loan has balance history. Remove those records first, or keep the loan for history.' });
+    if (table === 'cash_flow_categories' && db.prepare('SELECT 1 FROM cash_flow_transactions WHERE category_id=? LIMIT 1').get(id)) return res.status(400).json({ error: 'This category has entries. Deactivate it instead of deleting it, so historical records stay categorized.' });
     try {
       db.prepare(`DELETE FROM ${table} WHERE id=?`).run(id);
       res.json({ ok: true });

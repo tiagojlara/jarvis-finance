@@ -2,17 +2,17 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { api, currencies, escapeCsv, getHomeValue } from './api.js';
 import Sidebar from './components/Sidebar.jsx';
 import Modal from './components/Modal.jsx';
-import { Activity, Dividends, NetWorth, Overview, Planning, Portfolio, Settings } from './components/Views.jsx';
+import { Activity, CashFlow, Dividends, NetWorth, Overview, Planning, Portfolio, Settings } from './components/Views.jsx';
 
 const initialSettings = { homeCurrency: 'EUR', fxProvider: 'frankfurter', currentAge: 35, retirementAge: 65, monthlyContribution: 500, monthlyIncome: 2500, oneTimeContribution: 0, monthlyWithdrawal: 0, inflation: .02, scenarios: [.03, .05, .07] };
-const titles = { overview: 'Overview', portfolio: 'Portfolio', networth: 'Net worth', activity: 'Activity', dividends: 'Dividends', planning: 'Retirement plan', settings: 'Settings & backup' };
-const routes = ['overview', 'portfolio', 'networth', 'activity', 'dividends', 'planning', 'settings'];
+const titles = { overview: 'Overview', portfolio: 'Portfolio', networth: 'Net worth', activity: 'Activity', dividends: 'Dividends', cashflow: 'Cash flow', planning: 'Retirement plan', settings: 'Settings & backup' };
+const routes = ['overview', 'portfolio', 'networth', 'activity', 'dividends', 'cashflow', 'planning', 'settings'];
 const pathFor = (page) => (page === 'overview' ? '/' : `/${page}`);
 const pageFromLocation = () => {
   const slug = window.location.pathname.split('/')[1] || '';
   return routes.includes(slug) ? slug : 'overview';
 };
-const emptyData = { accounts: [], assets: [], transactions: [], prices: [], dividends: [], cash_balances: [], physical_assets: [], physical_valuations: [], liabilities: [], liability_balances: [], fx_rates: [], summary: { holdings: [], valueByCurrency: {}, costByCurrency: {}, dividendIncomeByCurrency: {} } };
+const emptyData = { accounts: [], assets: [], transactions: [], prices: [], dividends: [], cash_balances: [], physical_assets: [], physical_valuations: [], liabilities: [], liability_balances: [], fx_rates: [], cash_flow_categories: [], cash_flow_transactions: [], summary: { holdings: [], valueByCurrency: {}, costByCurrency: {}, dividendIncomeByCurrency: {} } };
 
 export default function App() {
   const [page, setPage] = useState(pageFromLocation); const [data, setData] = useState(emptyData); const [settings, setSettings] = useState(initialSettings);
@@ -34,10 +34,10 @@ export default function App() {
   }, [page]);
   const refresh = useCallback(async () => {
     try {
-      const [summary, accounts, assets, transactions, prices, dividends, cash_balances, physical_assets, physical_valuations, liabilities, liability_balances, fx_rates, saved] = await Promise.all([
-        'summary', 'accounts', 'assets', 'transactions', 'prices', 'dividends', 'cash_balances', 'physical_assets', 'physical_valuations', 'liabilities', 'liability_balances', 'fx_rates', 'settings',
+      const [summary, accounts, assets, transactions, prices, dividends, cash_balances, physical_assets, physical_valuations, liabilities, liability_balances, fx_rates, cash_flow_categories, cash_flow_transactions, saved] = await Promise.all([
+        'summary', 'accounts', 'assets', 'transactions', 'prices', 'dividends', 'cash_balances', 'physical_assets', 'physical_valuations', 'liabilities', 'liability_balances', 'fx_rates', 'cash_flow_categories', 'cash_flow_transactions', 'settings',
       ].map((path) => api(path)));
-      setData({ accounts, assets, transactions, prices, dividends, cash_balances, physical_assets, physical_valuations, liabilities, liability_balances, fx_rates, summary: summary.summary });
+      setData({ accounts, assets, transactions, prices, dividends, cash_balances, physical_assets, physical_valuations, liabilities, liability_balances, fx_rates, cash_flow_categories, cash_flow_transactions, summary: summary.summary });
       const storedCurrency = typeof saved.homeCurrency === 'string' ? saved.homeCurrency : saved.homeCurrency?.homeCurrency;
       const homeCurrency = ['EUR', 'SEK', 'USD', 'BRL'].includes(storedCurrency) ? storedCurrency : initialSettings.homeCurrency;
       setSettings({ ...initialSettings, ...saved, homeCurrency });
@@ -50,19 +50,24 @@ export default function App() {
   useEffect(() => { refresh(); }, [refresh]);
   const homeValue = useMemo(() => getHomeValue(data.summary.holdings, data.fx_rates, settings.homeCurrency), [data, settings.homeCurrency]);
   const addRecord = (type) => {
-    if (!['account', 'asset', 'physicalAsset', 'liability'].includes(type) && data.accounts.length === 0 && !['valuation', 'liabilityBalance'].includes(type)) { setError(''); navigate('portfolio'); setEditing(null); setModal('account'); return; }
+    const cashFlowTypes = ['cashFlowCategory', 'cashFlowTransaction'];
+    if (!['account', 'asset', 'physicalAsset', 'liability'].includes(type) && !cashFlowTypes.includes(type) && data.accounts.length === 0 && !['valuation', 'liabilityBalance'].includes(type)) { setError(''); navigate('portfolio'); setEditing(null); setModal('account'); return; }
     if (['price', 'dividend'].includes(type) && data.assets.length === 0) { setError(''); navigate('portfolio'); setEditing(null); setModal('asset'); return; }
     if (type === 'valuation' && data.physical_assets.length === 0) { setError(''); navigate('networth'); setEditing(null); setModal('physicalAsset'); return; }
     if (type === 'liabilityBalance' && data.liabilities.length === 0) { setError(''); navigate('networth'); setEditing(null); setModal('liability'); return; }
+    // Cash flow shares the portfolio account list; guide creation without leaving the page.
+    if (type === 'cashFlowTransaction' && data.accounts.length === 0) { setError(''); navigate('cashflow'); setEditing(null); setModal('account'); return; }
+    if (type === 'cashFlowTransaction' && !(data.cash_flow_categories || []).some((category) => category.active)) { setError(''); navigate('cashflow'); setEditing(null); setModal('cashFlowCategory'); return; }
     setError(''); setEditing(null); setModal(type);
   };
   const editRecord = (type, record) => { setError(''); setEditing(record); setModal(type); };
   const saveRecord = async (type, payload, id) => {
-    const endpoint = { account: 'accounts', asset: 'assets', transaction: 'transactions', price: 'prices', dividend: 'dividends', cashBalance: 'cash_balances', physicalAsset: 'physical_assets', valuation: 'physical_valuations', liability: 'liabilities', liabilityBalance: 'liability_balances' }[type];
+    const endpoint = { account: 'accounts', asset: 'assets', transaction: 'transactions', price: 'prices', dividend: 'dividends', cashBalance: 'cash_balances', physicalAsset: 'physical_assets', valuation: 'physical_valuations', liability: 'liabilities', liabilityBalance: 'liability_balances', cashFlowCategory: 'cash_flow_categories', cashFlowTransaction: 'cash_flow_transactions' }[type];
     await api(id ? `${endpoint}/${id}` : endpoint, { method: id ? 'PUT' : 'POST', body: JSON.stringify(payload) }); setModal(null); setEditing(null); await refresh();
   };
   const deleteRecord = async (endpoint, record) => {
-    if (!window.confirm(`Remove this ${endpoint.replace(/s$/, '')}? Keep a backup if you may need to recover it.`)) return;
+    const label = { cash_flow_transactions: 'cash-flow entry', cash_flow_categories: 'category' }[endpoint] || endpoint.replace(/s$/, '');
+    if (!window.confirm(`Remove this ${label}? Keep a backup if you may need to recover it.`)) return;
     try { await api(`${endpoint}/${record.id}`, { method: 'DELETE' }); await refresh(); } catch (e) { setError(e.message); }
   };
   const updateSettings = async (next) => {
@@ -94,6 +99,7 @@ export default function App() {
     networth: <NetWorth data={data} settings={settings} homeValue={homeValue} onAdd={addRecord} onDelete={deleteRecord} onEdit={editRecord}/>,
     activity: <Activity data={data} onAdd={addRecord} onDelete={deleteRecord}/>,
     dividends: <Dividends data={data} onAdd={addRecord} onDelete={deleteRecord} onEdit={editRecord}/>,
+    cashflow: <CashFlow data={data} onAdd={addRecord} onDelete={deleteRecord} onEdit={editRecord}/>,
     planning: <Planning settings={settings} setSettings={updateSettings} homeValue={homeValue}/>,
     settings: <Settings data={data} settings={settings} onHomeCurrency={updateSettings} onDelete={deleteRecord} onRefresh={refresh}/>,
   };

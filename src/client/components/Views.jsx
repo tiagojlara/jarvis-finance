@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react';
 import { DividendChart, PortfolioValueChart, ScenarioChart } from './Charts.jsx';
 import { api, convertRate, currencies, getHomeValue, money, today } from '../api.js';
 import { periodReturn, portfolioHistory, roiPercent } from '../history.mjs';
+import { cashFlowTotals, categoryBreakdown, monthLabel, monthOf, shiftMonth } from '../cashflow.mjs';
 import { project } from '../../projection.mjs';
 
 export function Metric({ label, value, detail, tone = '' }) {
@@ -164,6 +165,83 @@ export function Dividends({ data, onAdd, onDelete, onEdit }) {
     <Section title="Dividend payments"><DataTable key={assetId || 'all'} pageSize={20} empty="No dividend payments recorded. Add a payment to begin a history." rows={payments} onEdit={onEdit ? (payment) => onEdit('dividend', payment) : undefined} onDelete={(payment) => onDelete('dividends', payment)} columns={[{ key: 'date', label: 'PAYMENT DATE' }, { key: 'asset', label: 'HOLDING', render: (payment) => data.assets.find((asset) => asset.id === payment.asset_id)?.name || 'Asset' }, { key: 'account', label: 'ACCOUNT', render: (payment) => data.accounts.find((account) => account.id === payment.account_id)?.name || '—' }, { key: 'shares', label: 'SHARES HELD', render: (payment) => payment.shares ?? '—' }, { key: 'amount', label: 'AMOUNT', render: (payment) => money(payment.amount, payment.currency) }, { key: 'notes', label: 'NOTES' }]}/></Section>
   </>;
 }
+export function CashFlow({ data, onAdd, onDelete, onEdit }) {
+  const accounts = data.accounts || [];
+  const categories = data.cash_flow_categories || [];
+  const entries = data.cash_flow_transactions || [];
+  const currentMonth = today().slice(0, 7);
+  const [month, setMonth] = useState(currentMonth);
+  const [scope, setScope] = useState('month');
+  const [kindFilter, setKindFilter] = useState('');
+  const [accountFilter, setAccountFilter] = useState('');
+  const [categoryFilter, setCategoryFilter] = useState('');
+  const monthEntries = useMemo(() => entries.filter((entry) => monthOf(entry) === month), [entries, month]);
+  const totals = useMemo(() => cashFlowTotals(monthEntries), [monthEntries]);
+  const expenseRows = useMemo(() => categoryBreakdown(monthEntries, categories, 'expense'), [monthEntries, categories]);
+  const incomeRows = useMemo(() => categoryBreakdown(monthEntries, categories, 'income'), [monthEntries, categories]);
+  const accountName = (id) => accounts.find((account) => account.id === id)?.name || '—';
+  const categoryName = (id) => categories.find((category) => category.id === id)?.name || '—';
+  const visibleEntries = useMemo(() => [...(scope === 'month' ? monthEntries : entries)]
+    .filter((entry) => (!kindFilter || entry.kind === kindFilter) && (!accountFilter || String(entry.account_id) === accountFilter) && (!categoryFilter || String(entry.category_id) === categoryFilter))
+    .sort((a, b) => b.date.localeCompare(a.date) || b.id - a.id), [entries, monthEntries, scope, kindFilter, accountFilter, categoryFilter]);
+  const currenciesInUse = Object.keys(totals).sort();
+  return <>
+    <p className="panel-note">Cash flow is <b>recorded activity</b>: only the income and spending you enter here, in the same accounts your portfolio uses (brokerage, bank, card). It never changes your holdings, dividends, or net worth, and it is not a synced bank account — unrecorded payments simply are not shown. Totals stay per currency.</p>
+    <div className="toolbar">
+      <button type="button" className="button button-quiet" onClick={() => setMonth(shiftMonth(month, -1))} aria-label="Previous month">‹</button>
+      <input type="month" aria-label="Month" value={month} onChange={(event) => event.target.value && setMonth(event.target.value)}/>
+      <button type="button" className="button button-quiet" onClick={() => setMonth(shiftMonth(month, 1))} aria-label="Next month">›</button>
+      {month !== currentMonth && <button type="button" className="text-action" onClick={() => setMonth(currentMonth)}>Today</button>}
+      <div className="toolbar-spacer"/>
+      <button className="button button-quiet" onClick={() => onAdd('account')}>＋ Account</button>
+      <button className="button button-quiet" onClick={() => onAdd('cashFlowCategory')}>＋ Category</button>
+      <button className="button button-primary" onClick={() => onAdd('cashFlowTransaction')}>＋ Record entry</button>
+    </div>
+    <div className="metric-grid">
+      {currenciesInUse.map((currency) => { const t = totals[currency]; return [
+        <Metric key={`${currency}-income`} label={`INCOME · ${currency}`} value={money(t.income, currency)} detail={`${monthEntries.filter((entry) => entry.currency === currency && entry.kind === 'income').length} entries · ${monthLabel(month)}`}/>,
+        <Metric key={`${currency}-expense`} label={`SPENDING · ${currency}`} value={money(t.expense, currency)} detail={`${monthEntries.filter((entry) => entry.currency === currency && entry.kind === 'expense').length} entries · ${monthLabel(month)}`}/>,
+        <Metric key={`${currency}-net`} label={`NET · ${currency}`} value={money(t.net, currency)} tone={t.net >= 0 ? 'text-positive' : 'text-negative'} detail="Recorded income minus recorded spending"/>,
+      ]; }).flat()}
+      {!currenciesInUse.length && <Metric label="RECORDED CASH FLOW" value="—" detail={`Nothing recorded for ${monthLabel(month)} yet. Income and spending you add show up here.`}/>}
+    </div>
+    <div className="content-grid content-grid-main">
+      <Section title={`Spending by category · ${monthLabel(month)}`} action={categoryFilter ? <button type="button" className="text-action" onClick={() => setCategoryFilter('')}>Clear filter</button> : undefined}>
+        {expenseRows.length ? <div>{expenseRows.map((row) => <button type="button" key={`${row.currency}-${row.category_id}`} className="allocation-row category-filter" aria-pressed={String(row.category_id) === categoryFilter} onClick={() => setCategoryFilter(String(row.category_id) === categoryFilter ? '' : String(row.category_id))}><span>{row.name} · {row.currency}</span><b>{money(row.total, row.currency)}<span className="table-sub">{row.count} entries</span></b></button>)}</div> : <Empty>No spending recorded this month. Add an expense entry to see where it went.</Empty>}
+      </Section>
+      <Section title={`Income sources · ${monthLabel(month)}`}>
+        {incomeRows.length ? <div>{incomeRows.map((row) => <div key={`${row.currency}-${row.category_id}`} className="allocation-row"><span>{row.name} · {row.currency}</span><b>{money(row.total, row.currency)}</b></div>)}</div> : <Empty>Recorded income appears here, per category.</Empty>}
+      </Section>
+    </div>
+    <Section title={scope === 'month' ? `Entries · ${monthLabel(month)}` : 'All entries'}>
+      {!accounts.length && <Empty title="No accounts yet">Create an account — the same list your portfolio uses (bank, card, brokerage) — to start recording income and spending. <button type="button" className="text-action" onClick={() => onAdd('account')}>＋ Add account</button></Empty>}
+      {accounts.length > 0 && <>
+        <div className="period-controls" role="group" aria-label="Entry list scope">
+          {[['month', monthLabel(month)], ['all', 'All time']].map(([value, label]) => <button type="button" key={value} className={scope === value ? 'period-button selected' : 'period-button'} aria-pressed={scope === value} onClick={() => setScope(value)}>{label}</button>)}
+        </div>
+        <div className="toolbar">
+          <select aria-label="Filter by type" value={kindFilter} onChange={(event) => { setKindFilter(event.target.value); setCategoryFilter(''); }}><option value="">Any type</option><option value="income">Income</option><option value="expense">Spending</option></select>
+          <select aria-label="Filter by account" value={accountFilter} onChange={(event) => setAccountFilter(event.target.value)}><option value="">All accounts</option>{accounts.map((account) => <option key={account.id} value={account.id}>{account.name}</option>)}</select>
+          <select aria-label="Filter by category" value={categoryFilter} onChange={(event) => setCategoryFilter(event.target.value)}><option value="">All categories</option>{categories.filter((category) => (category.active || category.id === Number(categoryFilter)) && (!kindFilter || category.kind === kindFilter)).map((category) => <option key={category.id} value={category.id}>{category.name}</option>)}</select>
+          {(kindFilter || accountFilter || categoryFilter) && <button type="button" className="text-action" onClick={() => { setKindFilter(''); setAccountFilter(''); setCategoryFilter(''); }}>Clear filters</button>}
+        </div>
+        <DataTable key={`${scope}-${month}-${kindFilter}-${accountFilter}-${categoryFilter}`} pageSize={20} empty={scope === 'month' ? `Nothing recorded in ${monthLabel(month)}${(kindFilter || accountFilter || categoryFilter) ? ' with the current filters' : ''}.` : 'No cash-flow entries recorded yet.'} rows={visibleEntries}
+          onEdit={(entry) => onEdit('cashFlowTransaction', entry)} onDelete={(entry) => onDelete('cash_flow_transactions', entry)}
+          columns={[
+            { key: 'date', label: 'DATE' },
+            { key: 'kind', label: 'TYPE', render: (entry) => <span className="tag">{entry.kind === 'expense' ? 'spending' : 'income'}</span> },
+            { key: 'account', label: 'ACCOUNT', render: (entry) => accountName(entry.account_id) },
+            { key: 'category', label: 'CATEGORY', render: (entry) => categoryName(entry.category_id) },
+            { key: 'payee', label: 'PAYEE', render: (entry) => entry.payee || '—' },
+            { key: 'description', label: 'DESCRIPTION', render: (entry) => entry.description || '—' },
+            { key: 'amount', label: 'AMOUNT', render: (entry) => <b className={entry.kind === 'expense' ? 'text-negative' : 'text-positive'}>{entry.kind === 'expense' ? '−' : '+'}{money(entry.amount, entry.currency, 2)}</b> },
+          ]}/>
+      </>}
+    </Section>
+    <Section title="Categories"><p className="panel-note">Income and spending use separate categories. Categories are deactivated, not deleted, once entries use them, so history stays categorized. Entries use the same accounts as the portfolio — manage them with the ＋ Account button above or on the Portfolio page.</p><DataTable pageSize={12} empty="Defaults are seeded here; add your own categories as needed." rows={[...categories].sort((a, b) => a.kind.localeCompare(b.kind) || a.name.localeCompare(b.name))} onEdit={(category) => onEdit('cashFlowCategory', category)} onDelete={(category) => onDelete('cash_flow_categories', category)} columns={[{ key: 'name', label: 'CATEGORY' }, { key: 'kind', label: 'TYPE', render: (category) => <span className="tag">{category.kind}</span> }, { key: 'active', label: 'STATUS', render: (category) => category.active ? <span className="text-positive">Active</span> : <span className="tag">Inactive</span> }, { key: 'entries', label: 'ENTRIES', render: (category) => entries.filter((entry) => entry.category_id === category.id).length }]}/></Section>
+  </>;
+}
+
 export function NetWorth({ data, settings, homeValue, onAdd, onDelete, onEdit }) {
   const latestFor = (rows, key, id) => [...rows].filter((row) => row[key] === id).sort((a, b) => b.date.localeCompare(a.date) || b.id - a.id)[0];
   const assets = data.physical_assets.map((asset) => ({ ...asset, valuation: latestFor(data.physical_valuations, 'physical_asset_id', asset.id) }));
