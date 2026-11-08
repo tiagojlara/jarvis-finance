@@ -470,7 +470,16 @@ function createMcpRouter({ db }) {
 
   router.get('/mcp', async (req, res) => {
     const transport = sessionFor(req);
-    if (!transport) return res.sendStatus(404);
+    if (!transport) {
+      // A sessionless GET is what a browser probe looks like. Per Streamable HTTP a server
+      // without an SSE push channel answers 405 — with a body that explains itself, so
+      // "is it down?" answers itself too.
+      return res.status(405).json({
+        error: 'jarvis-finance MCP endpoint: not a web page. Agents connect by POSTing JSON-RPC to this URL (initialize → notifications/initialized → tools/*). If you are here from a browser, the API server is up — nothing is wrong.',
+        transport: 'streamable-http',
+        mcp_version: '2025-06-18',
+      });
+    }
     return transport.handleRequest(req, res);
   });
 

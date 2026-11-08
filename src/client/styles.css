@@ -9,3 +9,116 @@
 .table-pagination{display:flex;align-items:center;justify-content:center;gap:14px;margin-top:12px;color:#8b9891;font-size:10px}.page-button{display:inline-flex;align-items:center;gap:4px;padding:7px 12px;border:1px solid var(--line);border-radius:7px;background:#fff;color:#5c6b62;font-size:10px;font-weight:650;transition:background .15s,color .15s}.page-button:hover:not(:disabled){background:#f5f8f5;color:var(--ink)}.page-button:disabled{opacity:.4;cursor:default}@media(max-width:430px){.table-pagination{gap:9px}.page-button{padding:6px 9px}}
 
 .category-filter{display:flex;width:100%;border:1px solid transparent;border-radius:7px;background:transparent;text-align:left;font:inherit;color:inherit}.category-filter:hover{background:#f4f7f3}.category-filter[aria-pressed="true"]{border-color:#dce8df;background:#edf4ee}.category-filter b{display:flex;flex-direction:column;align-items:flex-end;gap:2px}
+
+/* Cash flow page */
+.cashflow-intro{display:flex;align-items:flex-start;justify-content:space-between;gap:18px;margin:0 0 17px;padding:16px 18px;border:1px solid #e3ebe4;border-radius:12px;background:linear-gradient(110deg,#f0f6f0,#fff 72%)}
+.cashflow-intro .panel-note{max-width:660px;margin:6px 0 0;font-size:11px;line-height:1.65}
+.cashflow-kicker{color:#4d8069;font-size:9px;font-weight:750;letter-spacing:1.1px}
+.cashflow-period-label{flex:0 0 auto;padding:7px 10px;border:1px solid #e3ebe4;border-radius:20px;background:#fff;color:#61786b;font-size:10px;font-weight:650}
+.cashflow-toolbar{gap:10px;margin:0 0 15px;padding:10px;border:1px solid var(--line);border-radius:10px;background:#fff}
+.month-picker{display:flex;align-items:center;gap:5px;padding:3px;border:1px solid #e7ece7;border-radius:8px;background:#f8faf8}
+.month-picker input{width:145px;padding:7px 6px;border:0;background:transparent;font-size:12px;font-weight:650;text-align:center}
+.month-step{display:grid;place-items:center;width:30px;height:30px;border:0;border-radius:6px;background:transparent;color:#587363;font-size:20px;line-height:1}
+.month-step:hover{background:#eaf2ec}
+.cashflow-toolbar>.button{min-height:38px;padding-inline:12px;white-space:nowrap}
+.cashflow-toolbar .toolbar-spacer{min-width:10px}
+.cashflow-toolbar+.metric-grid{grid-template-columns:repeat(auto-fit,minmax(205px,1fr));gap:11px}
+.cashflow-toolbar+.metric-grid .metric-card{position:relative;overflow:hidden;padding:16px 17px;border-radius:12px;box-shadow:0 2px 8px #24372b08}
+.cashflow-toolbar+.metric-grid .metric-card:before{position:absolute;inset:0 auto 0 0;width:3px;background:#b7d9c2;content:""}
+.cashflow-toolbar+.metric-grid .metric-card:nth-child(3n):before{background:#83bd98}
+.cashflow-toolbar+.metric-grid .metric-card:nth-child(3n + 2):before{background:#e9b4a6}
+.cashflow-toolbar+.metric-grid .metric-label{letter-spacing:.8px}
+.cashflow-toolbar+.metric-grid .metric-value{margin-top:9px;font-size:23px}
+.cashflow-toolbar+.metric-grid .metric-value.text-positive{color:#258052}
+.cashflow-toolbar+.metric-grid .metric-value.text-negative{color:#bd5c50}
+.cashflow-toolbar~.content-grid .panel{border-radius:12px}
+.cashflow-toolbar~.panel{border-radius:12px}
+.cashflow-toolbar~.panel .toolbar select{min-width:145px;flex:1}
+.cashflow-toolbar~.panel .toolbar{gap:9px}
+@media(max-width:760px){.cashflow-intro{padding:14px;flex-direction:column;gap:9px}.cashflow-period-label{padding:5px 9px}.cashflow-toolbar{align-items:stretch;padding:9px;gap:8px}.cashflow-toolbar .toolbar-spacer{display:none}.cashflow-toolbar .button{flex:1;justify-content:center;padding-inline:8px;font-size:10px}.month-picker{flex:1;justify-content:space-between}.month-picker input{flex:1;width:auto}.cashflow-toolbar+.metric-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media(max-width:430px){.cashflow-toolbar{gap:7px}.cashflow-toolbar .button{font-size:9px;padding-inline:6px}.cashflow-toolbar+.metric-grid .metric-card{padding:13px}.cashflow-toolbar+.metric-grid .metric-value{font-size:17px}.cashflow-toolbar+.metric-grid .metric-detail{font-size:8px}}
+
+/* App-wide layout, navigation and form controls */
+@media(min-width:761px){.main-content{width:calc(100% - 238px);max-width:none;margin-left:238px;margin-right:0;padding-right:clamp(30px,4vw,72px);padding-left:clamp(30px,4vw,72px)}.sidebar{width:238px;padding:30px 16px 20px}.brand{margin-bottom:39px}.sidebar nav{gap:3px}.nav-group-label{margin:0 0 7px;padding:0 12px;color:#a0aaa3;font-size:8px;font-weight:750;letter-spacing:1.1px}.nav-group-tools{margin-top:21px}.nav-item{position:relative;min-height:42px;padding:9px 11px;border-radius:9px;color:#69796f;font-size:11px}.nav-icon{display:grid;place-items:center;width:25px;height:25px;border-radius:7px;background:#f4f6f3;color:#71847a;font-size:14px}.nav-item:hover .nav-icon{background:#eaf1eb;color:var(--green)}.nav-item.selected{background:#edf4ee;color:#28644f}.nav-item.selected:before{position:absolute;left:-16px;width:3px;height:22px;border-radius:0 3px 3px 0;background:var(--green);content:""}.nav-item.selected .nav-icon{background:#dcebe0;color:#28644f}.privacy{padding:12px;font-size:10px}}
+select{appearance:none;padding-right:32px;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath d='m3 4.5 3 3 3-3' fill='none' stroke='%2376887e' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.4'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right 11px center;transition:border-color .15s,box-shadow .15s,background-color .15s}
+select:hover{border-color:#cbd8ce;background-color:#fcfdfc}
+select:focus,input:focus,textarea:focus{outline:none;border-color:#85ad91;box-shadow:0 0 0 3px #dcebe0}
+button:focus-visible{outline:3px solid #c9e1d0;outline-offset:2px}
+.toolbar{gap:10px}.toolbar select{min-height:38px;border-radius:8px}.button{min-height:38px;border-radius:8px}.button-primary{box-shadow:0 2px 4px #2f6e5b20}.button-quiet{border-color:#e4eae4}.topbar{gap:18px}.topbar-actions{gap:10px}.topbar-currency{padding:4px 5px 4px 10px;border:1px solid var(--line);border-radius:9px;background:#fff}.topbar-currency select{border:0;background-color:transparent;box-shadow:none}.topbar-currency select:focus{box-shadow:0 0 0 2px #dcebe0;border-radius:6px}
+@media(max-width:760px){.nav-group-label{display:none}.sidebar nav{gap:2px}.main-content{width:100%}.topbar{align-items:flex-start}.topbar-actions{flex-wrap:wrap;justify-content:flex-end;gap:6px}.toolbar select{flex:1 1 140px}.sidebar .nav-icon{background:transparent}}
+@media(max-width:430px){.topbar{align-items:center}.topbar-actions{max-width:64%}.topbar-currency{padding:2px}.topbar-currency select{padding:7px 24px 7px 7px;background-position:right 6px center}.toolbar select{flex-basis:100%}}
+.actions-heading{text-align:right;padding-right:12px}
+.table-actions{display:flex;align-items:center;justify-content:flex-end;gap:7px;padding:9px 8px;white-space:nowrap}
+.table-action{display:inline-flex;align-items:center;justify-content:center;min-height:29px;padding:5px 10px;border:1px solid #e6ece7;border-radius:7px;background:#fff;color:#536c5e;font-size:10px;font-weight:650;line-height:1;transition:background .15s,border-color .15s,color .15s,transform .15s}
+.table-action:hover{border-color:#cbdccf;background:#f3f8f3;color:#2f6e5b}
+.table-action:active{transform:translateY(1px)}
+.table-action.table-remove{border-color:#f0e2de;background:#fffaf9;color:#a65e51}
+.table-action.table-remove:hover{border-color:#e7c2b8;background:#fff2ee;color:#9c493b}
+.table-action:focus-visible{outline:3px solid #d7e7da;outline-offset:2px}
+@media(max-width:430px){.table-actions{gap:5px;padding-inline:6px}.table-action{min-height:28px;padding:5px 8px;font-size:9px}}
+.cashflow-period-select{display:grid;gap:4px;min-width:170px;color:#8a9990;font-size:8px;font-weight:750;letter-spacing:.9px}
+.cashflow-period-select select{min-height:36px;border-color:#e3eae4;border-radius:8px;color:#3d5147;font-size:11px;font-weight:650;letter-spacing:0}
+.cashflow-toolbar{align-items:flex-end}
+.cashflow-toolbar .month-picker,.cashflow-toolbar>.button{align-self:flex-end}
+.cashflow-account-select{display:grid;gap:4px;min-width:170px;color:#8a9990;font-size:8px;font-weight:750;letter-spacing:.9px}
+.cashflow-account-select select{min-height:36px;border-color:#e3eae4;border-radius:8px;color:#3d5147;font-size:11px;font-weight:650;letter-spacing:0}
+@media(max-width:760px){.cashflow-period-select{flex:1 1 100%;grid-template-columns:85px minmax(0,1fr);align-items:center;gap:8px}.cashflow-period-select select{width:100%}.cashflow-toolbar .month-picker{flex:1}}
+@media(max-width:760px){.cashflow-account-select{flex:1 1 100%;grid-template-columns:85px minmax(0,1fr);align-items:center;gap:8px}.cashflow-account-select select{width:100%}}
+.dividend-intro{display:flex;align-items:center;justify-content:space-between;gap:18px;margin:0 0 15px;padding:20px 22px;border:1px solid #e1ebe3;border-radius:13px;background:radial-gradient(ellipse at 88% 20%,#e8f3e9 0,transparent 35%),linear-gradient(110deg,#f1f7f1,#fff 72%)}
+.dividend-intro h2{margin:6px 0;color:#263a30;font-size:22px;letter-spacing:-.6px}
+.dividend-intro p{max-width:620px;margin:0;color:#7d8b82;font-size:11px;line-height:1.6}
+.dividend-intro-mark{display:grid;place-items:center;flex:0 0 auto;width:48px;height:48px;border:1px solid #d7e7da;border-radius:14px;background:#fff;color:#39815e;font-size:25px}
+.dividend-toolbar{align-items:flex-end;gap:12px;padding:11px;border:1px solid var(--line);border-radius:11px;background:#fff}
+.dividend-asset-select,.dividend-period{display:grid;gap:5px;color:#8a9990;font-size:8px;font-weight:750;letter-spacing:.85px}
+.dividend-asset-select{min-width:170px}.dividend-asset-select select{min-height:36px;border-color:#e3eae4;border-radius:8px;color:#3d5147;font-size:11px;font-weight:650;letter-spacing:0}
+.dividend-period .period-controls{margin:0;padding:0;gap:2px}.dividend-period .period-button{padding:7px 9px;font-size:10px}
+.dividend-record-count{align-self:center;color:#95a097;font-size:9px;white-space:nowrap}
+.dividend-metrics{grid-template-columns:repeat(auto-fit,minmax(200px,1fr));margin-top:13px}
+.dividend-metrics .metric-card{border-radius:12px;box-shadow:0 2px 8px #24372b08}
+.dividend-metrics .metric-value.text-positive{color:#258052}
+.dividend-note{margin:0 0 14px;padding:0 2px}
+.dividend-chart-panel,.dividend-payments{border-radius:12px}
+.dividend-chart-panel .panel-heading h2{font-size:14px}
+.dividend-payments .table-scroll{border-radius:8px}
+@media(max-width:760px){.dividend-intro{padding:16px;align-items:flex-start}.dividend-intro-mark{width:40px;height:40px}.dividend-toolbar{align-items:stretch;gap:9px}.dividend-asset-select,.dividend-period{flex:1 1 100%;grid-template-columns:90px minmax(0,1fr);align-items:center;gap:8px}.dividend-asset-select select{width:100%}.dividend-period .period-controls{overflow-x:auto}.dividend-record-count{align-self:center;margin-right:auto}.dividend-toolbar>.button{flex:0 0 auto}}
+@media(max-width:430px){.dividend-intro h2{font-size:19px}.dividend-intro p{font-size:10px}.dividend-toolbar>.button{flex:1}.dividend-record-count{width:100%;margin:0}.dividend-metrics{grid-template-columns:repeat(2,minmax(0,1fr))}}
+.retirement-intro{margin:0 0 15px;padding:19px 21px;border:1px solid #e1ebe3;border-radius:13px;background:linear-gradient(110deg,#f0f6f0,#fff 75%)}
+.retirement-intro h2{margin:6px 0;color:#263a30;font-size:21px;letter-spacing:-.55px}
+.retirement-intro p{max-width:660px;margin:0;color:#7d8b82;font-size:11px;line-height:1.6}
+.retirement-metrics{grid-template-columns:repeat(4,minmax(0,1fr))}
+.retirement-metrics .metric-card{border-radius:12px;box-shadow:0 2px 8px #24372b08}
+.retirement-metrics .metric-value.text-positive{color:#258052}.retirement-metrics .metric-value.text-negative{color:#bd5c50}
+.retirement-chart-tag{padding:6px 9px;border:1px solid #e1ebe3;border-radius:20px;background:#f7faf7;color:#61786b;font-size:9px;font-weight:650;white-space:nowrap}
+.scenario-assumptions{display:flex;flex-direction:column;gap:4px;margin-top:5px;padding:10px 12px;border:1px solid #e9eee9;border-radius:8px;background:#fafcfa;color:#829087;font-size:9px;line-height:1.5}
+.scenario-assumptions b{color:#53685b;font-size:10px}
+.retirement-data-warning{margin:0 0 15px;padding:11px 14px;border:1px solid #eadbbf;border-radius:9px;background:#fffaf0;color:#806c4e;font-size:10px;line-height:1.5}
+.retirement-data-warning b{margin-right:4px;color:#6e5733}
+.scenario-row .scenario-value small{display:block;margin-top:3px;color:#8e9a92;font-size:8px;font-weight:500}
+@media(max-width:1050px){.retirement-metrics{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media(max-width:430px){.retirement-intro{padding:15px}.retirement-intro h2{font-size:18px}.retirement-metrics .metric-value{font-size:16px}.retirement-metrics .metric-detail{font-size:8px}}
+
+.cashflow-breakdown{padding:20px}
+.flow-breakdown-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(250px,1fr));gap:12px}
+.flow-breakdown-card{min-width:0;padding:12px;border:1px solid #f0e9e6;border-radius:11px;background:linear-gradient(145deg,#fff,#fffaf8)}
+.flow-breakdown-card.income{border-color:#e5eee7;background:linear-gradient(145deg,#fff,#f9fcf9)}
+.flow-breakdown-heading{display:flex;align-items:center;justify-content:space-between;padding:2px 4px 8px;color:#748178;font-size:10px;font-weight:650}
+.flow-breakdown-heading b{padding:4px 7px;border-radius:12px;background:#f2f5f2;color:#53685b;font-size:9px}
+.flow-category-chart{display:grid;grid-template-columns:minmax(112px,.85fr) minmax(120px,1fr);align-items:center;gap:8px}
+.flow-donut{position:relative;min-width:0}
+.flow-donut-center{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;pointer-events:none}
+.flow-donut-center small{color:#9aa49d;font-size:8px;font-weight:700;letter-spacing:.8px}
+.flow-donut-center b{max-width:90%;margin-top:3px;color:#33453d;font-size:12px;text-align:center;overflow-wrap:anywhere}
+.flow-category-list{display:grid;gap:3px;max-height:190px;overflow:auto;padding:2px}
+.flow-category-row{display:grid;grid-template-columns:8px minmax(0,1fr) auto;align-items:center;gap:7px;width:100%;padding:7px 6px;border:1px solid transparent;border-radius:7px;background:transparent;color:inherit;text-align:left;font:inherit}
+button.flow-category-row{cursor:pointer}
+button.flow-category-row:hover{background:#f7f8f6}
+.flow-category-row.selected{border-color:#dce8df;background:#edf4ee}
+.flow-category-swatch{width:7px;height:7px;border-radius:50%;background:var(--category-color)}
+.flow-category-info{display:grid;min-width:0;gap:5px}
+.flow-category-name{overflow:hidden;color:#526158;font-size:10px;font-weight:600;text-overflow:ellipsis;white-space:nowrap}
+.flow-category-track{height:3px;overflow:hidden;border-radius:4px;background:#eef0ed}
+.flow-category-track i{display:block;height:100%;border-radius:4px}
+.flow-category-amount{display:grid;justify-items:end;gap:2px;color:#35463e;font-size:9px;font-weight:700;white-space:nowrap}
+.flow-category-amount small{color:#9aa49d;font-size:8px;font-weight:500}
+.flow-chart-empty{display:grid;min-height:180px;place-items:center;color:#95a098;font-size:10px}
+@media(max-width:430px){.cashflow-breakdown{padding:14px}.flow-breakdown-grid{grid-template-columns:1fr}.flow-category-chart{grid-template-columns:minmax(105px,.85fr) minmax(120px,1fr);gap:4px}.flow-category-name{font-size:9px}.flow-category-amount{font-size:8px}}

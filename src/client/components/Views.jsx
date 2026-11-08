@@ -1,9 +1,9 @@
 import { useMemo, useState } from 'react';
-import { DividendChart, PortfolioValueChart, ScenarioChart } from './Charts.jsx';
+import { DividendChart, FlowCategoryChart, PortfolioValueChart, ScenarioChart } from './Charts.jsx';
 import { api, convertRate, currencies, getHomeValue, money, today } from '../api.js';
 import { periodReturn, portfolioHistory, roiPercent } from '../history.mjs';
 import { cashFlowTotals, categoryBreakdown, monthLabel, monthOf, shiftMonth } from '../cashflow.mjs';
-import { project } from '../../projection.mjs';
+import { projectRetirement } from '../../projection.mjs';
 
 export function Metric({ label, value, detail, tone = '' }) {
   return <article className="metric-card"><div className="metric-label">{label}</div><div className={`metric-value ${tone}`}>{value}</div>{detail && <div className="metric-detail">{detail}</div>}</article>;
@@ -20,7 +20,7 @@ export function DataTable({ columns, rows, empty, onDelete, onEdit, pageSize = 0
   const current = Math.min(page, totalPages - 1);
   const visible = totalPages > 1 ? rows.slice(current * pageSize, current * pageSize + pageSize) : rows;
   return <>
-    <div className="table-scroll"><table><thead><tr>{columns.map((c) => <th key={c.key}>{c.label}</th>)}{(onDelete || onEdit) && <th/>}</tr></thead><tbody>{visible.map((row) => <tr key={row.id}>{columns.map((c) => <td key={c.key}>{c.render ? c.render(row) : row[c.key]}</td>)}{(onDelete || onEdit) && <td className="text-right">{onEdit && <button className="text-action" onClick={() => onEdit(row)}>Edit</button>}{onDelete && <button className="text-action danger" onClick={() => onDelete(row)}>Remove</button>}</td>}</tr>)}</tbody></table></div>
+    <div className="table-scroll"><table><thead><tr>{columns.map((c) => <th key={c.key}>{c.label}</th>)}{(onDelete || onEdit) && <th className="actions-heading">ACTIONS</th>}</tr></thead><tbody>{visible.map((row) => <tr key={row.id}>{columns.map((c) => <td key={c.key}>{c.render ? c.render(row) : row[c.key]}</td>)}{(onDelete || onEdit) && <td className="table-actions">{onEdit && <button type="button" className="table-action table-edit" onClick={() => onEdit(row)}>Edit</button>}{onDelete && <button type="button" className="table-action table-remove" onClick={() => onDelete(row)}>Remove</button>}</td>}</tr>)}</tbody></table></div>
     {totalPages > 1 && <div className="table-pagination" role="group" aria-label="Table pages">
       <button type="button" className="page-button" onClick={() => setPage(current - 1)} disabled={current === 0} aria-label="Previous page">‹ Prev</button>
       <span className="page-status" aria-live="polite">Showing {current * pageSize + 1}–{Math.min(rows.length, (current + 1) * pageSize)} of {rows.length}</span>
@@ -116,6 +116,7 @@ export function Activity({ data, onAdd, onDelete }) {
 export function Dividends({ data, onAdd, onDelete, onEdit }) {
   const [assetId, setAssetId] = useState('');
   const [period, setPeriod] = useState('1Y');
+  const dividendAssets = data.assets.filter((asset) => data.dividends.some((payment) => String(payment.asset_id) === String(asset.id)));
   const payments = data.dividends.filter((payment) => !assetId || String(payment.asset_id) === assetId).sort((a, b) => b.date.localeCompare(a.date));
   // Continuous month axis for the chart: every month in the selected period gets one bar,
   // including months without payments (zero), so gaps in income are visible as real calendar time.
@@ -145,10 +146,10 @@ export function Dividends({ data, onAdd, onDelete, onEdit }) {
   const periodText = { YTD: 'year to date', '1Y': 'last 12 months', '3Y': 'last 3 years', '5Y': 'last 5 years', ALL: 'all time' }[period];
   const assetName = (id) => data.assets.find((asset) => asset.id === id)?.name || 'Asset';
   const chartCurrencies = currencies.filter((currency) => payments.some((payment) => payment.currency === currency));
-  return <><div className="metric-grid">{chartCurrencies.map((currency) => <Metric key={currency} label={`DIVIDENDS · ${currency}`} value={money(totals[currency] || 0, currency)} detail={`${windowPayments.filter((payment) => payment.currency === currency).length} payments · ${periodText}`}/>)}{!payments.length && <Metric label="DIVIDENDS RECEIVED" value="—" detail="Actual payments only"/>}</div>
-    <div className="toolbar"><select aria-label="Filter dividends by asset" value={assetId} onChange={(event) => setAssetId(event.target.value)}><option value="">All assets</option>{data.assets.map((asset) => <option key={asset.id} value={asset.id}>{asset.name}</option>)}</select><div className="toolbar-spacer"/><button className="button button-primary" onClick={() => onAdd('dividend')}>＋ Record dividend</button></div>
-    <p className="panel-note">Charts use recorded dividend payments only; they do not include estimates or projected income. Amounts remain in their original currencies. The totals above and the charts follow the selected period; each monthly bar is divided by asset.</p>
-    <div className="period-controls" role="group" aria-label="Dividend chart period">{['YTD', '1Y', '3Y', '5Y', 'ALL'].map((option) => <button type="button" key={option} aria-pressed={period === option} className={period === option ? 'period-button selected' : 'period-button'} onClick={() => setPeriod(option)}>{option === 'ALL' ? 'All' : option}</button>)}</div>
+  return <><div className="dividend-intro"><div><span className="cashflow-kicker">INCOME FROM YOUR HOLDINGS</span><h2>Dividend income</h2><p>Follow the payments you have received over time. Each currency is shown separately, and monthly bars show which holdings paid.</p></div><div className="dividend-intro-mark" aria-hidden="true">↗</div></div>
+    <div className="toolbar dividend-toolbar"><label className="dividend-asset-select"><span>HOLDING</span><select aria-label="Filter dividends by asset" value={assetId} onChange={(event) => setAssetId(event.target.value)}><option value="">All holdings</option>{dividendAssets.map((asset) => <option key={asset.id} value={asset.id}>{asset.name}</option>)}</select></label><div className="dividend-period"><span>TIME PERIOD</span><div className="period-controls" role="group" aria-label="Dividend chart period">{['YTD', '1Y', '3Y', '5Y', 'ALL'].map((option) => <button type="button" key={option} aria-pressed={period === option} className={period === option ? 'period-button selected' : 'period-button'} onClick={() => setPeriod(option)}>{option === 'ALL' ? 'All time' : option}</button>)}</div></div><div className="toolbar-spacer"/><div className="dividend-record-count">{windowPayments.length} {windowPayments.length === 1 ? 'payment' : 'payments'} · {periodText}</div><button className="button button-primary" onClick={() => onAdd('dividend')}>＋ Record dividend</button></div>
+    <div className="metric-grid dividend-metrics">{chartCurrencies.map((currency) => <Metric key={currency} label={`RECEIVED · ${currency}`} value={money(totals[currency] || 0, currency)} tone="text-positive" detail={`${windowPayments.filter((payment) => payment.currency === currency).length} payments · ${periodText}`}/>)}{!payments.length && <Metric label="DIVIDENDS RECEIVED" value="—" detail="Recorded payments appear here"/>}</div>
+    <p className="panel-note dividend-note">Recorded dividend payments only. These totals do not include estimates or projected income.</p>
     <div className="content-grid">{chartCurrencies.map((currency) => {
       const currencyPayments = payments.filter((payment) => payment.currency === currency);
       // One stacked segment per asset; colors and legend stay stable across period switches.
@@ -160,9 +161,9 @@ export function Dividends({ data, onAdd, onDelete, onEdit }) {
         const row = rowByMonth.get(monthOf(payment)); // outside the window: not charted, not counted
         if (row) row[`asset-${payment.asset_id}`] += Number(payment.amount);
       }
-      return <Section key={currency} title={`Monthly income · ${currency}`}><DividendChart currency={currency} data={rows} series={series}/></Section>;
-    })}</div>
-    <Section title="Dividend payments"><DataTable key={assetId || 'all'} pageSize={20} empty="No dividend payments recorded. Add a payment to begin a history." rows={payments} onEdit={onEdit ? (payment) => onEdit('dividend', payment) : undefined} onDelete={(payment) => onDelete('dividends', payment)} columns={[{ key: 'date', label: 'PAYMENT DATE' }, { key: 'asset', label: 'HOLDING', render: (payment) => data.assets.find((asset) => asset.id === payment.asset_id)?.name || 'Asset' }, { key: 'account', label: 'ACCOUNT', render: (payment) => data.accounts.find((account) => account.id === payment.account_id)?.name || '—' }, { key: 'shares', label: 'SHARES HELD', render: (payment) => payment.shares ?? '—' }, { key: 'amount', label: 'AMOUNT', render: (payment) => money(payment.amount, payment.currency) }, { key: 'notes', label: 'NOTES' }]}/></Section>
+      return <Section key={currency} className="dividend-chart-panel" title={`Monthly payments · ${currency}`}><DividendChart currency={currency} data={rows} series={series}/></Section>;
+    })}{!chartCurrencies.length && <Section className="dividend-chart-panel" title="Monthly history"><Empty title="Your dividend history starts here">Record a payment to see income trends and which holdings contributed.</Empty></Section>}</div>
+    <Section className="dividend-payments" title="Payment history"><DataTable key={assetId || 'all'} pageSize={20} empty="No dividend payments recorded. Add a payment to begin a history." rows={payments} onEdit={onEdit ? (payment) => onEdit('dividend', payment) : undefined} onDelete={(payment) => onDelete('dividends', payment)} columns={[{ key: 'date', label: 'PAYMENT DATE' }, { key: 'asset', label: 'HOLDING', render: (payment) => data.assets.find((asset) => asset.id === payment.asset_id)?.name || 'Asset' }, { key: 'account', label: 'ACCOUNT', render: (payment) => data.accounts.find((account) => account.id === payment.account_id)?.name || '—' }, { key: 'shares', label: 'SHARES HELD', render: (payment) => payment.shares ?? '—' }, { key: 'amount', label: 'AMOUNT', render: (payment) => <b className="text-positive">{money(payment.amount, payment.currency)}</b> }, { key: 'notes', label: 'NOTES' }]}/></Section>
   </>;
 }
 export function CashFlow({ data, onAdd, onDelete, onEdit }) {
@@ -171,27 +172,35 @@ export function CashFlow({ data, onAdd, onDelete, onEdit }) {
   const entries = data.cash_flow_transactions || [];
   const currentMonth = today().slice(0, 7);
   const [month, setMonth] = useState(currentMonth);
-  const [scope, setScope] = useState('month');
+  const [period, setPeriod] = useState('month');
   const [kindFilter, setKindFilter] = useState('');
   const [accountFilter, setAccountFilter] = useState('');
   const [categoryFilter, setCategoryFilter] = useState('');
-  const monthEntries = useMemo(() => entries.filter((entry) => monthOf(entry) === month), [entries, month]);
-  const totals = useMemo(() => cashFlowTotals(monthEntries), [monthEntries]);
-  const expenseRows = useMemo(() => categoryBreakdown(monthEntries, categories, 'expense'), [monthEntries, categories]);
-  const incomeRows = useMemo(() => categoryBreakdown(monthEntries, categories, 'income'), [monthEntries, categories]);
+  const activeAccounts = useMemo(() => accounts.filter((account) => entries.some((entry) => String(entry.account_id) === String(account.id))), [accounts, entries]);
+  const periodStart = period === 'month' ? month : period === '3m' ? shiftMonth(currentMonth, -2) : period === '6m' ? shiftMonth(currentMonth, -5) : period === '12m' ? shiftMonth(currentMonth, -11) : period === 'ytd' ? `${currentMonth.slice(0, 4)}-01` : null;
+  const periodLabel = period === 'month' ? monthLabel(month) : ({ '3m': 'Last 3 months', '6m': 'Last 6 months', '12m': 'Last 12 months', ytd: 'Year to date', all: 'All time' }[period]);
+  const periodEntries = useMemo(() => entries.filter((entry) => {
+    const entryMonth = monthOf(entry);
+    return (!periodStart || entryMonth >= periodStart) && (period === 'month' ? entryMonth === month : period === 'all' || entryMonth <= currentMonth) && (!accountFilter || String(entry.account_id) === accountFilter);
+  }), [entries, periodStart, period, month, currentMonth, accountFilter]);
+  const totals = useMemo(() => cashFlowTotals(periodEntries), [periodEntries]);
+  const expenseRows = useMemo(() => categoryBreakdown(periodEntries, categories, 'expense'), [periodEntries, categories]);
+  const incomeRows = useMemo(() => categoryBreakdown(periodEntries, categories, 'income'), [periodEntries, categories]);
   const accountName = (id) => accounts.find((account) => account.id === id)?.name || '—';
   const categoryName = (id) => categories.find((category) => category.id === id)?.name || '—';
-  const visibleEntries = useMemo(() => [...(scope === 'month' ? monthEntries : entries)]
-    .filter((entry) => (!kindFilter || entry.kind === kindFilter) && (!accountFilter || String(entry.account_id) === accountFilter) && (!categoryFilter || String(entry.category_id) === categoryFilter))
-    .sort((a, b) => b.date.localeCompare(a.date) || b.id - a.id), [entries, monthEntries, scope, kindFilter, accountFilter, categoryFilter]);
+  const visibleEntries = useMemo(() => [...periodEntries]
+    .filter((entry) => (!kindFilter || entry.kind === kindFilter) && (!categoryFilter || String(entry.category_id) === categoryFilter))
+    .sort((a, b) => b.date.localeCompare(a.date) || b.id - a.id), [periodEntries, kindFilter, categoryFilter]);
   const currenciesInUse = Object.keys(totals).sort();
   return <>
-    <p className="panel-note">Cash flow is <b>recorded activity</b>: only the income and spending you recorded here or through an MCP agent, in the same accounts your portfolio uses (brokerage, bank, card). It never changes your holdings, dividends, or net worth, and it is not a synced bank account — unrecorded payments simply are not shown. Totals stay per currency.</p>
-    <div className="toolbar">
-      <button type="button" className="button button-quiet" onClick={() => setMonth(shiftMonth(month, -1))} aria-label="Previous month">‹</button>
+    <div className="cashflow-intro"><div><span className="cashflow-kicker">YOUR MONEY, AT A GLANCE</span><p className="panel-note">Track recorded income and spending across your accounts. Totals stay in their original currencies; only entries you add appear here.</p></div><span className="cashflow-period-label">{periodLabel}</span></div>
+    <div className="toolbar cashflow-toolbar">
+      <label className="cashflow-period-select"><span>CALENDAR VIEW</span><select aria-label="Calendar view" value={period} onChange={(event) => setPeriod(event.target.value)}><option value="month">Selected month</option><option value="3m">Last 3 months</option><option value="6m">Last 6 months</option><option value="12m">Last 12 months</option><option value="ytd">Year to date</option><option value="all">All time</option></select></label>
+      {period === 'month' && <div className="month-picker"><button type="button" className="month-step" onClick={() => setMonth(shiftMonth(month, -1))} aria-label="Previous month">‹</button>
       <input type="month" aria-label="Month" value={month} onChange={(event) => event.target.value && setMonth(event.target.value)}/>
-      <button type="button" className="button button-quiet" onClick={() => setMonth(shiftMonth(month, 1))} aria-label="Next month">›</button>
-      {month !== currentMonth && <button type="button" className="text-action" onClick={() => setMonth(currentMonth)}>Today</button>}
+      <button type="button" className="month-step" onClick={() => setMonth(shiftMonth(month, 1))} aria-label="Next month">›</button></div>}
+      {period === 'month' && month !== currentMonth && <button type="button" className="text-action" onClick={() => setMonth(currentMonth)}>Current month</button>}
+      <label className="cashflow-account-select"><span>ACCOUNT</span><select aria-label="Filter cash flow by account" value={accountFilter} onChange={(event) => setAccountFilter(event.target.value)}><option value="">All active accounts</option>{activeAccounts.map((account) => <option key={account.id} value={account.id}>{account.name}</option>)}</select></label>
       <div className="toolbar-spacer"/>
       <button className="button button-quiet" onClick={() => onAdd('account')}>＋ Account</button>
       <button className="button button-quiet" onClick={() => onAdd('cashFlowCategory')}>＋ Category</button>
@@ -199,33 +208,29 @@ export function CashFlow({ data, onAdd, onDelete, onEdit }) {
     </div>
     <div className="metric-grid">
       {currenciesInUse.map((currency) => { const t = totals[currency]; return [
-        <Metric key={`${currency}-income`} label={`INCOME · ${currency}`} value={money(t.income, currency)} detail={`${monthEntries.filter((entry) => entry.currency === currency && entry.kind === 'income').length} entries · ${monthLabel(month)}`}/>,
-        <Metric key={`${currency}-expense`} label={`SPENDING · ${currency}`} value={money(t.expense, currency)} detail={`${monthEntries.filter((entry) => entry.currency === currency && entry.kind === 'expense').length} entries · ${monthLabel(month)}`}/>,
-        <Metric key={`${currency}-net`} label={`NET · ${currency}`} value={money(t.net, currency)} tone={t.net >= 0 ? 'text-positive' : 'text-negative'} detail="Recorded income minus recorded spending"/>,
+        <Metric key={`${currency}-income`} label={`INCOME · ${currency}`} value={money(t.income, currency)} tone="text-positive" detail={`${periodEntries.filter((entry) => entry.currency === currency && entry.kind === 'income').length} entries · ${periodLabel}`}/>,
+        <Metric key={`${currency}-expense`} label={`SPENDING · ${currency}`} value={`−${money(t.expense, currency)}`} tone="text-negative" detail={`${periodEntries.filter((entry) => entry.currency === currency && entry.kind === 'expense').length} entries · ${periodLabel}`}/>,
+        <Metric key={`${currency}-net`} label={`NET · ${currency}`} value={`${t.net < 0 ? '−' : '+'}${money(Math.abs(t.net), currency)}`} tone={t.net >= 0 ? 'text-positive' : 'text-negative'} detail="Income minus spending"/>,
       ]; }).flat()}
-      {!currenciesInUse.length && <Metric label="RECORDED CASH FLOW" value="—" detail={`Nothing recorded for ${monthLabel(month)} yet. Income and spending you add show up here.`}/>}
+      {!currenciesInUse.length && <Metric label="RECORDED CASH FLOW" value="—" detail={`Nothing recorded for ${periodLabel} yet. Income and spending you add show up here.`}/>}
     </div>
     <div className="content-grid content-grid-main">
-      <Section title={`Spending by category · ${monthLabel(month)}`} action={categoryFilter ? <button type="button" className="text-action" onClick={() => setCategoryFilter('')}>Clear filter</button> : undefined}>
-        {expenseRows.length ? <div>{expenseRows.map((row) => <button type="button" key={`${row.currency}-${row.category_id}`} className="allocation-row category-filter" aria-pressed={String(row.category_id) === categoryFilter} onClick={() => setCategoryFilter(String(row.category_id) === categoryFilter ? '' : String(row.category_id))}><span>{row.name} · {row.currency}</span><b>{money(row.total, row.currency)}<span className="table-sub">{row.count} entries</span></b></button>)}</div> : <Empty>No spending recorded this month. Add an expense entry to see where it went.</Empty>}
+      <Section title={`Spending by category · ${periodLabel}`} className="cashflow-breakdown" action={categoryFilter ? <button type="button" className="text-action" onClick={() => setCategoryFilter('')}>Clear filter</button> : undefined}>
+        {expenseRows.length ? <div className="flow-breakdown-grid">{currenciesInUse.map((currency) => { const rows = expenseRows.filter((row) => row.currency === currency); return rows.length ? <div className="flow-breakdown-card" key={currency}><div className="flow-breakdown-heading"><span>Spending</span><b>{currency}</b></div><FlowCategoryChart rows={rows} currency={currency} kind="expense" selectedCategory={categoryFilter} onSelectCategory={setCategoryFilter}/></div> : null; })}</div> : <Empty>No spending recorded for this period. Add an expense entry to see where it went.</Empty>}
       </Section>
-      <Section title={`Income sources · ${monthLabel(month)}`}>
-        {incomeRows.length ? <div>{incomeRows.map((row) => <div key={`${row.currency}-${row.category_id}`} className="allocation-row"><span>{row.name} · {row.currency}</span><b>{money(row.total, row.currency)}</b></div>)}</div> : <Empty>Recorded income appears here, per category.</Empty>}
+      <Section title={`Income by category · ${periodLabel}`} className="cashflow-breakdown">
+        {incomeRows.length ? <div className="flow-breakdown-grid">{currenciesInUse.map((currency) => { const rows = incomeRows.filter((row) => row.currency === currency); return rows.length ? <div className="flow-breakdown-card income" key={currency}><div className="flow-breakdown-heading"><span>Income</span><b>{currency}</b></div><FlowCategoryChart rows={rows} currency={currency} kind="income"/></div> : null; })}</div> : <Empty>Recorded income appears here, per category.</Empty>}
       </Section>
     </div>
-    <Section title={scope === 'month' ? `Entries · ${monthLabel(month)}` : 'All entries'}>
+    <Section title={`Entries · ${periodLabel}`}>
       {!accounts.length && <Empty title="No accounts yet">Create an account — the same list your portfolio uses (bank, card, brokerage) — to start recording income and spending. <button type="button" className="text-action" onClick={() => onAdd('account')}>＋ Add account</button></Empty>}
       {accounts.length > 0 && <>
-        <div className="period-controls" role="group" aria-label="Entry list scope">
-          {[['month', monthLabel(month)], ['all', 'All time']].map(([value, label]) => <button type="button" key={value} className={scope === value ? 'period-button selected' : 'period-button'} aria-pressed={scope === value} onClick={() => setScope(value)}>{label}</button>)}
-        </div>
         <div className="toolbar">
           <select aria-label="Filter by type" value={kindFilter} onChange={(event) => { setKindFilter(event.target.value); setCategoryFilter(''); }}><option value="">Any type</option><option value="income">Income</option><option value="expense">Spending</option></select>
-          <select aria-label="Filter by account" value={accountFilter} onChange={(event) => setAccountFilter(event.target.value)}><option value="">All accounts</option>{accounts.map((account) => <option key={account.id} value={account.id}>{account.name}</option>)}</select>
           <select aria-label="Filter by category" value={categoryFilter} onChange={(event) => setCategoryFilter(event.target.value)}><option value="">All categories</option>{categories.filter((category) => (category.active || category.id === Number(categoryFilter)) && (!kindFilter || category.kind === kindFilter)).map((category) => <option key={category.id} value={category.id}>{category.name}</option>)}</select>
           {(kindFilter || accountFilter || categoryFilter) && <button type="button" className="text-action" onClick={() => { setKindFilter(''); setAccountFilter(''); setCategoryFilter(''); }}>Clear filters</button>}
         </div>
-        <DataTable key={`${scope}-${month}-${kindFilter}-${accountFilter}-${categoryFilter}`} pageSize={20} empty={scope === 'month' ? `Nothing recorded in ${monthLabel(month)}${(kindFilter || accountFilter || categoryFilter) ? ' with the current filters' : ''}.` : 'No cash-flow entries recorded yet.'} rows={visibleEntries}
+        <DataTable key={`${period}-${month}-${kindFilter}-${accountFilter}-${categoryFilter}`} pageSize={20} empty={`Nothing recorded for ${periodLabel}${(kindFilter || accountFilter || categoryFilter) ? ' with the current filters' : ''}.`} rows={visibleEntries}
           onEdit={(entry) => onEdit('cashFlowTransaction', entry)} onDelete={(entry) => onDelete('cash_flow_transactions', entry)}
           columns={[
             { key: 'date', label: 'DATE' },
@@ -263,15 +268,20 @@ export function NetWorth({ data, settings, homeValue, onAdd, onDelete, onEdit })
 export function Planning({ settings, setSettings, homeValue }) {
   const [form, setForm] = useState({ ...settings, inflation: Number(settings.inflation ?? .02) * 100, conservative: Number(settings.scenarios?.[0] ?? .03) * 100, base: Number(settings.scenarios?.[1] ?? .05) * 100, optimistic: Number(settings.scenarios?.[2] ?? .07) * 100 });
   const years = Math.max(0, Number(form.retirementAge) - Number(form.currentAge));
-  const forecast = (annualRate, horizon = years) => project({ startingValue: Number(homeValue.value || 0) + Number(form.oneTimeContribution || 0), monthlyContribution: Number(form.monthlyContribution || 0), annualReturn: Number(annualRate), years: Math.floor(horizon), monthlyWithdrawal: Number(form.monthlyWithdrawal || 0) });
-  const valueAt = (annualRate) => forecast(annualRate).at(-1).value;
+  const forecast = (annualRate) => projectRetirement({ startingValue: Number(homeValue.value || 0) + Number(form.oneTimeContribution || 0), monthlyContribution: Number(form.monthlyContribution || 0), annualReturn: Number(annualRate), inflation: Number(form.inflation) / 100, yearsToRetirement: years, retirementYears: 30, monthlyWithdrawal: Number(form.monthlyWithdrawal || 0), withdrawalRate: .04 });
+  const valueAtRetirement = (annualRate) => forecast(annualRate).retirementValue;
   const scenarios = [['Conservative', 'conservative'], ['Base', 'base'], ['Optimistic', 'optimistic']];
-  const series = scenarios.map(([label, key]) => ({ label, values: forecast(Number(form[key]) / 100, Math.min(years, 80)).map((point) => point.value) }));
+  const series = scenarios.map(([label, key]) => ({ label, values: forecast(Number(form[key]) / 100).points.map((point) => point.value) }));
+  const baseProjection = forecast(Number(form.base) / 100);
+  const targetIncome = Number(form.monthlyIncome || 0);
+  const incomeCoverage = targetIncome > 0 ? baseProjection.monthlyIncome / targetIncome * 100 : null;
   const save = async (e) => { e.preventDefault(); await setSettings({ ...form, currentAge: Number(form.currentAge), retirementAge: Number(form.retirementAge), monthlyContribution: Number(form.monthlyContribution), monthlyIncome: Number(form.monthlyIncome), oneTimeContribution: Number(form.oneTimeContribution), monthlyWithdrawal: Number(form.monthlyWithdrawal), inflation: Number(form.inflation) / 100, scenarios: [Number(form.conservative) / 100, Number(form.base) / 100, Number(form.optimistic) / 100] }); };
   const update = (key, value) => setForm({ ...form, [key]: value });
-  return <><div className="metric-grid"><Metric label="TIME TO RETIREMENT" value={`${years} years`} detail={`Age ${form.currentAge} → ${form.retirementAge}`}/><Metric label="CURRENT PORTFOLIO" value={money(homeValue.value, form.homeCurrency)}/><Metric label="DESIRED MONTHLY INCOME" value={money(form.monthlyIncome, form.homeCurrency)}/><Metric label="EST. MONTHLY INCOME · 4%" value={money(valueAt(Number(form.base) / 100) * .04 / 12, form.homeCurrency)} detail="Illustrative reference · not guaranteed"/></div>
-    <div className="content-grid content-grid-main"><Section title="Editable scenarios"><ScenarioChart lines={series} currency={form.homeCurrency}/><div className="scenario-list">{scenarios.map(([label, key]) => <label className="scenario-row" key={key}><span><b>{label}</b><small>Annual return assumption</small></span><input type="number" step="0.5" value={form[key]} onChange={(e) => update(key, e.target.value)}/><span>%</span><b className="scenario-value">{money(valueAt(Number(form[key]) / 100), form.homeCurrency)}</b></label>)}</div></Section>
-      <Section title="Your assumptions"><form onSubmit={save}><div className="form-grid">{[['currentAge','Current age'],['retirementAge','Retirement age'],['monthlyContribution','Monthly contribution'],['monthlyIncome','Desired monthly income'],['oneTimeContribution','One-time contribution'],['monthlyWithdrawal','Monthly withdrawal'],['inflation','Inflation (%)']].map(([key, label]) => <label className="field" key={key}><span>{label}</span><input type="number" step="any" value={form[key]} onChange={(e) => update(key, e.target.value)}/></label>)}<label className="field"><span>Home currency</span><select value={form.homeCurrency} onChange={(e) => update('homeCurrency', e.target.value)}>{currencies.map((c) => <option key={c}>{c}</option>)}</select></label></div><button className="button button-primary assumption-save">Save assumptions</button></form><p className="panel-note">Monthly compounding and contributions, one-time contribution at the start, and withdrawals throughout. Excludes taxes and fees. Inflation is shown separately and does not adjust contributions. The 4% reference is not a sustainable-income promise.</p></Section>
+  return <><div className="retirement-intro"><span className="cashflow-kicker">PLAN FOR YOUR FUTURE</span><h2>A retirement plan in today’s money</h2><p>See how your portfolio could grow after inflation, then estimate a starting retirement income using the 4% rule.</p></div>
+    <div className="metric-grid retirement-metrics"><Metric label="TIME TO RETIREMENT" value={`${Math.floor(years)} years`} detail={`Age ${form.currentAge} → ${form.retirementAge}`}/><Metric label="CURRENT PORTFOLIO" value={money(homeValue.value, form.homeCurrency)} detail={homeValue.complete ? 'Current value · nominal' : 'Partial value · prices or FX missing'}/><Metric label="TARGET MONTHLY INCOME" value={money(targetIncome, form.homeCurrency)} detail="In today’s purchasing power"/><Metric label="4% RULE · MONTHLY" value={money(baseProjection.monthlyIncome, form.homeCurrency)} tone={incomeCoverage != null && incomeCoverage >= 100 ? 'text-positive' : 'text-negative'} detail={`${incomeCoverage == null ? 'Base scenario · at retirement' : `${incomeCoverage.toFixed(0)}% of target · base scenario`}`}/></div>
+    {!homeValue.complete && <div className="retirement-data-warning" role="status"><b>Starting portfolio value is incomplete.</b> Some holdings are missing prices or exchange rates. The projection uses only values it can convert, so it may be understated.</div>}
+    <div className="content-grid content-grid-main"><Section title="Portfolio projection · today’s money" action={<span className="retirement-chart-tag">Retirement phase · 30 years</span>}><p className="panel-note">Balances are inflation-adjusted. The dashed line marks retirement; after it, the chart models a 4% first-year withdrawal that keeps the same purchasing power each year.</p><ScenarioChart lines={series} currency={form.homeCurrency} retirementYear={Math.floor(years)} startAge={Number(form.currentAge)}/><div className="scenario-assumptions"><b>Scenario assumptions</b><span>Nominal annual returns are editable inputs. New plans start at 3%, 5%, and 7%; these are not forecasts or values inferred from your portfolio.</span></div><div className="scenario-list">{scenarios.map(([label, key]) => <label className="scenario-row" key={key}><span><b>{label}</b><small>Nominal return · {Number(form.inflation)}% inflation</small></span><input aria-label={`${label} nominal annual return percent`} type="number" step="0.5" value={form[key]} onChange={(e) => update(key, e.target.value)}/><span>%</span><b className="scenario-value">{money(valueAtRetirement(Number(form[key]) / 100), form.homeCurrency)}<small>at retirement</small></b></label>)}</div></Section>
+      <Section title="Your assumptions"><form onSubmit={save}><div className="form-grid">{[['currentAge','Current age'],['retirementAge','Retirement age'],['monthlyContribution','Monthly contribution'],['monthlyIncome','Desired monthly income'],['oneTimeContribution','One-time contribution'],['monthlyWithdrawal','Monthly withdrawal before retirement'],['inflation','Inflation (%)']].map(([key, label]) => <label className="field" key={key}><span>{label}</span><input type="number" step="any" value={form[key]} onChange={(e) => update(key, e.target.value)}/></label>)}<label className="field"><span>Home currency</span><select value={form.homeCurrency} onChange={(e) => update('homeCurrency', e.target.value)}>{currencies.map((c) => <option key={c}>{c}</option>)}</select></label></div><button className="button button-primary assumption-save">Save assumptions</button></form><p className="panel-note">The 4% rule starts with 4% of the portfolio at retirement. Retirement withdrawals stay level in today’s money, which means they rise with inflation in future currency. Returns, inflation, contributions, and pre-retirement withdrawals are assumptions. Excludes taxes and fees; the 4% rule is a historical guideline, not a guarantee.</p></Section>
     </div></>;
 }
 export function Settings({ data, settings, onHomeCurrency, onDelete, onRefresh }) {

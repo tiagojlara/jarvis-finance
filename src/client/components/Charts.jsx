@@ -1,6 +1,6 @@
 import {
   Area, AreaChart, Bar, BarChart, CartesianGrid, Cell, Legend, Line, LineChart, Pie, PieChart,
-  ResponsiveContainer, Tooltip, XAxis, YAxis,
+  ReferenceLine, ResponsiveContainer, Tooltip, XAxis, YAxis,
 } from 'recharts';
 import { money } from '../api.js';
 
@@ -88,17 +88,18 @@ export function Sparkline({ values = [], labels = [], color = '#2f6e5b', emptyMe
   </ResponsiveContainer></div>;
 }
 
-export function ScenarioChart({ lines, currency = 'EUR' }) {
+export function ScenarioChart({ lines, currency = 'EUR', retirementYear, startAge }) {
   if (!lines.some((line) => line.values.length)) return <div className="empty-chart">Set a retirement age to see the projection.</div>;
   const length = Math.max(...lines.map((line) => line.values.length));
   const rows = Array.from({ length }, (_, index) => Object.fromEntries([['year', index], ...lines.map((line) => [line.label, line.values[index] ?? null])]));
   return <div className="chart-frame"><ResponsiveContainer width="100%" height={260}>
     <LineChart data={rows} margin={{ top: 8, right: 14, bottom: 0, left: 0 }}>
       <CartesianGrid stroke="#edf0ec" strokeDasharray="3 4" vertical={false}/>
-      <XAxis dataKey="year" tickFormatter={(year) => `+${year}y`} tick={axisStyle} axisLine={false} tickLine={false}/>
+      <XAxis dataKey="year" tickFormatter={(year) => startAge == null ? `+${year}y` : `${startAge + year}`} tick={axisStyle} axisLine={false} tickLine={false}/>
       <YAxis tickFormatter={(value) => new Intl.NumberFormat(undefined, { notation: 'compact', maximumFractionDigits: 1 }).format(value)} width={52} tick={axisStyle} axisLine={false} tickLine={false}/>
-      <Tooltip labelFormatter={(year) => `${year} years`} formatter={(value, name) => [money(Number(value), currency), name]} contentStyle={tooltipStyle}/>
+      <Tooltip labelFormatter={(year) => startAge == null ? `${year} years` : `Age ${startAge + Number(year)}`} formatter={(value, name) => [money(Number(value), currency), name]} contentStyle={tooltipStyle}/>
       <Legend iconType="circle" wrapperStyle={{ fontSize: 10 }}/>
+      {retirementYear != null && <ReferenceLine x={retirementYear} stroke="#91a99a" strokeDasharray="4 4" label={{ value: 'Retirement', fill: '#718078', fontSize: 10, position: 'insideTopRight' }}/>}
       {lines.map((line, index) => <Line key={line.label} type="monotone" dataKey={line.label} stroke={palette[index % palette.length]} strokeWidth={2.5} dot={false} activeDot={{ r: 4 }}/>) }
     </LineChart>
   </ResponsiveContainer></div>;
@@ -111,4 +112,25 @@ export function AllocationBar({ entries = [] }) {
   return <div className="allocation-chart"><div className="allocation-donut"><ResponsiveContainer width="100%" height={190}>
     <PieChart><Pie data={data} dataKey="value" nameKey="name" innerRadius="58%" outerRadius="82%" paddingAngle={2} stroke="#fff" strokeWidth={2}>{data.map((item, index) => <Cell key={item.name} fill={palette[index % palette.length]}/>)}</Pie><Tooltip formatter={(value, name) => [`${money(Number(value))} · ${Math.round(Number(value) / total * 100)}%`, name]} contentStyle={tooltipStyle}/></PieChart>
   </ResponsiveContainer></div><div className="allocation-legend">{data.map((item, index) => <div className="allocation-row" key={item.name}><span><i style={{ background: palette[index % palette.length] }}/>{item.name}</span><b>{Math.round(item.value / total * 100)}%</b></div>)}</div></div>;
+}
+
+export function FlowCategoryChart({ rows = [], currency = 'EUR', kind = 'expense', selectedCategory = '', onSelectCategory }) {
+  const total = rows.reduce((sum, row) => sum + Number(row.total || 0), 0);
+  const colors = kind === 'income' ? ['#378564', '#6eaa82', '#9cc9a8', '#b9d9bd', '#d4e7d5'] : ['#d77c68', '#e79c81', '#edb49c', '#f2cbb7', '#f6dfd2'];
+  if (!rows.length || !total) return <div className="flow-chart-empty">No {kind === 'income' ? 'income' : 'spending'} recorded yet</div>;
+  const data = rows.map((row) => ({ name: row.name, value: Number(row.total), category_id: row.category_id }));
+  return <div className="flow-category-chart"><div className="flow-donut"><ResponsiveContainer width="100%" height={190}><PieChart>
+    <Pie data={data} dataKey="value" nameKey="name" innerRadius="62%" outerRadius="88%" paddingAngle={2} stroke="#fff" strokeWidth={2}>{data.map((row, index) => <Cell key={`${row.category_id}-${row.name}`} fill={colors[index % colors.length]}/>)}</Pie>
+    <Tooltip formatter={(value, name) => [money(Number(value), currency), name]} contentStyle={tooltipStyle}/>
+  </PieChart></ResponsiveContainer><div className="flow-donut-center"><small>TOTAL</small><b>{money(total, currency)}</b></div></div>
+    <div className="flow-category-list">{rows.map((row, index) => {
+      const share = Number(row.total) / total * 100;
+      const selected = String(row.category_id) === String(selectedCategory);
+      const Row = onSelectCategory ? 'button' : 'div';
+      return <Row type={onSelectCategory ? 'button' : undefined} key={`${row.currency}-${row.category_id}`} className={`flow-category-row${selected ? ' selected' : ''}`} onClick={onSelectCategory ? () => onSelectCategory(selected ? '' : String(row.category_id)) : undefined} aria-pressed={onSelectCategory ? selected : undefined}>
+        <span className="flow-category-swatch" style={{ '--category-color': colors[index % colors.length] }}/><span className="flow-category-info"><span className="flow-category-name">{row.name}</span><span className="flow-category-track"><i style={{ width: `${share}%`, background: colors[index % colors.length] }}/></span></span>
+        <span className="flow-category-amount">{money(row.total, currency)}<small>{share < 1 ? '<1' : Math.round(share)}%</small></span>
+      </Row>;
+    })}</div>
+  </div>;
 }

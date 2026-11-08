@@ -29,3 +29,46 @@ export function project({
 export function projectedValue(options) {
   return project(options).at(-1).value;
 }
+
+// Real retirement projection in today's purchasing power. Contributions and
+// pre-retirement withdrawals remain constant in real terms. At retirement, the
+// first year's withdrawal is 4% of the retirement balance, then stays constant
+// in real terms so the nominal amount rises with inflation each year.
+export function projectRetirement({
+  startingValue = 0,
+  monthlyContribution = 0,
+  annualReturn = 0,
+  inflation = 0,
+  yearsToRetirement = 0,
+  retirementYears = 30,
+  monthlyWithdrawal = 0,
+  withdrawalRate = 0.04,
+} = {}) {
+  const workYears = Math.max(0, Math.floor(Number(yearsToRetirement)));
+  const drawdownYears = Math.max(0, Math.floor(Number(retirementYears)));
+  const realAnnualReturn = (1 + Number(annualReturn)) / (1 + Number(inflation)) - 1;
+  const monthlyGrowth = (1 + realAnnualReturn) ** (1 / 12);
+  let value = Number(startingValue);
+  let retirementMonthlyWithdrawal = null;
+  const points = [];
+
+  for (let year = 0; year <= workYears + drawdownYears; year += 1) {
+    if (year === workYears) retirementMonthlyWithdrawal = Math.max(0, value * Number(withdrawalRate) / 12);
+    const retired = year >= workYears;
+    const withdrawal = retired ? retirementMonthlyWithdrawal : Number(monthlyWithdrawal);
+    points.push({ year, value, phase: retired ? 'Retirement' : 'Accumulation', monthlyWithdrawal: withdrawal || 0 });
+
+    for (let month = 0; month < 12; month += 1) {
+      value = Math.max(0, value * monthlyGrowth + (retired ? 0 : Number(monthlyContribution)) - (withdrawal || 0));
+    }
+  }
+
+  const retirementPoint = points[workYears];
+  return {
+    points,
+    retirementValue: retirementPoint?.value ?? value,
+    monthlyIncome: retirementPoint?.monthlyWithdrawal ?? 0,
+    realAnnualReturn,
+    withdrawalRate: Number(withdrawalRate),
+  };
+}

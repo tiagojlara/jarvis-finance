@@ -12,7 +12,7 @@ const pages = [
 export default function Sidebar({ page, navigate }) {
   return <aside className="sidebar">
     <div className="brand"><Logo size={35}/><span>jarvis<small>FINANCE · PERSONAL PORTFOLIO</small></span></div>
-    <nav>{pages.map(([id, icon, label]) => <button key={id} onClick={() => navigate(id)} className={`nav-item ${page === id ? 'selected' : ''}`} aria-current={page === id ? 'page' : undefined}><span className="nav-icon">{icon}</span><span>{label}</span></button>)}</nav>
+    <nav aria-label="Main navigation"><div className="nav-group-label">YOUR FINANCES</div>{pages.slice(0, 6).map(([id, icon, label]) => <button key={id} onClick={() => navigate(id)} className={`nav-item ${page === id ? 'selected' : ''}`} aria-current={page === id ? 'page' : undefined}><span className="nav-icon" aria-hidden="true">{icon}</span><span>{label}</span></button>)}<div className="nav-group-label nav-group-tools">PLAN &amp; SETTINGS</div>{pages.slice(6).map(([id, icon, label]) => <button key={id} onClick={() => navigate(id)} className={`nav-item ${page === id ? 'selected' : ''}`} aria-current={page === id ? 'page' : undefined}><span className="nav-icon" aria-hidden="true">{icon}</span><span>{label}</span></button>)}</nav>
     <div className="privacy"><span className="privacy-dot" />Stored on this device<small>No account · No tracking</small></div>
   </aside>;
 }

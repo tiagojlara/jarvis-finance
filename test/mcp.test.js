@@ -87,7 +87,7 @@ async function startMcp() {
   };
 
   return {
-    rpc, initialize, callTool, expectToolError, listTools, api, db,
+    rpc, initialize, callTool, expectToolError, listTools, api, db, base,
     close: () => new Promise((resolve) => { db.close(); server.close(resolve); }),
   };
 }
@@ -283,5 +283,15 @@ test('requests without a known session are rejected', async (t) => {
   t.after(client.close);
   const { status } = await client.rpc('tools/list', {}); // no initialize performed
   assert.equal(status, 404);
+});
+
+test('a browser-style GET explains the endpoint instead of a bare 404', async (t) => {
+  const client = await startMcp();
+  t.after(client.close);
+  const response = await fetch(`${client.base}/mcp`); // no session header, like typing the URL in a browser
+  assert.equal(response.status, 405, 'GET without a session is refused, but with a body that says why');
+  const hint = await response.json();
+  assert.match(hint.error, /not a web page/i);
+  assert.match(hint.error, /the API server is up/i);
 });
 
