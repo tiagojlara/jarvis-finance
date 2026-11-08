@@ -1,7 +1,7 @@
 ---
 name: jarvis-finance
-description: Query and maintain Tiago's local jarvis-finance portfolio via the jarvis MCP tools — holdings, transactions, dividends, FX rates, net worth, the cash-flow income/spending ledger, and recording manual prices, FX rates, dividend payments, or cash-flow entries. Use when asked about the portfolio, assets, cash, dividends, income, spending, or currency conversions.
-version: 1.2.0
+description: Query and maintain the user's local jarvis-finance portfolio via the jarvis MCP tools — holdings, transactions, dividends, FX rates, net worth, the cash-flow income/spending ledger, and recording manual prices, FX rates, dividend payments, or cash-flow entries. Use when asked about the portfolio, assets, cash, dividends, income, spending, or currency conversions.
+version: 1.4.0
 platforms: [macos]
 metadata:
   hermes:
@@ -15,13 +15,62 @@ All portfolio access goes through the `jarvis` MCP server (the local jarvis-fina
 app at `http://127.0.0.1:3000/mcp`). Tools appear namespaced, e.g.
 `jarvis__get_summary`, `jarvis__save_price` — check the live tool list for exact names.
 
+## Where personal facts live (read before editing this skill)
+
+This file is **method only** — it should still read correctly for somebody else's jarvis
+install. Person-specific facts never go here, and are never restated here: real names, family
+members, account/asset/category **ids**, bank or card numbers, which categories this user
+retired or invented, merchant→category mappings, and any "the user always/never does X" rule.
+
+Those live in `references/import-profile.md` **in this skill folder**
+(`${HERMES_SKILL_DIR}/references/import-profile.md`), which is also the only place to write
+them: append the fact there, in the matching section, instead of adding a bullet to this file.
+Read it before touching spending, income, imports or dividends.
+
+- If that file does not exist (a fresh clone — it is gitignored, deliberately), create it by
+  asking the user the questions it is organised around. Do not "solve" a missing profile by
+  writing the answers into this skill.
+- Technique that generalises → this file. Fact about this person's data → the profile file.
+- `SKILL.md` and every `references/` file **except the profile** are committed to git and meant
+  to be shared, so they name no institutions, issuers or brokers either: describe a format by its
+  shape ("a Nordic retail-bank CSV", "a two-column card invoice PDF"), and let the profile's
+  source→recipe table say who produces it. Same for the exact tag and notes strings an import
+  writes — those are already in this user's rows, so they are personal data.
+- Three destinations, by who they help: a fact about **this person's** data → the profile file.
+  Detail about **one format or task** (a CSV's columns, a PDF's layout, a website's quirks) → a
+  topic file under `references/`, listed below. Something true of **every** jarvis conversation
+  → this file, written impersonally. Length here is paid for by every session; length in a
+  reference file is paid for only by the sessions that open it.
+- The profile records **names, not ids**: this user edits accounts and categories in the jarvis
+  UI between runs, so resolve every id live (`list_accounts`, `list_cash_flow_categories`,
+  `list_assets`) and trust the tool over anything written down, including this skill.
+
 ## Before anything else
 
-1. Call `get_summary`. If the MCP call fails or the connection is refused, the local
-   app is not running: tell the user to start it from
-   `/Users/tiago.franca/Projects/jarvis-finance` with `npm run dev` (dev) or
-   `npm start` (production). Do not attempt to start it yourself, and never query
-   the SQLite file directly — the API is the only supported access path.
+1. Call `get_summary`. If the MCP call fails or the connection is refused, the local app is not
+   running: tell the user to start it from the project root — `${HERMES_SKILL_DIR}/../..`, since
+   this skill ships inside the repo — with `npm run dev` (dev) or `npm start` (production). Do
+   not start it yourself, and never query the SQLite file directly: the API is the only supported
+   access path.
+2. For anything involving spending, income, imports or dividends, read
+   `${HERMES_SKILL_DIR}/references/import-profile.md` for the user's accounts, category choices
+   and merchant mappings — then resolve the ids it names against the live tools.
+
+## Reference files (read the one the task needs)
+
+Only this file is always in view. The rest load on demand — `read_file` on
+`${HERMES_SKILL_DIR}/references/<name>` or `skill_view(name, file_path=...)`:
+
+| File | Open it when |
+| --- | --- |
+| `references/import-profile.md` | **before any** import, categorisation or dividend — the user's accounts, category choices, merchant pairs and preferences (personal, gitignored) |
+| `references/import-card-statement-pdf.md` | a credit-card invoice PDF arrives |
+| `references/import-bank-csv.md` | a bank transaction CSV arrives |
+| `references/import-broker-export.md` | a broker transactions-and-notes export arrives |
+| `references/price-history-web.md` | a fund NAV or stock close must be found online, or a long price backfill is being written |
+
+New depth goes into the matching topic file, not into this one — and if you create a new topic
+file, add a row to the table above, or no future session will know to open it.
 
 ## Ground rules (app semantics, not guesses)
 
@@ -47,17 +96,11 @@ app at `http://127.0.0.1:3000/mcp`). Tools appear namespaced, e.g.
 
 ## Finding price history on the web (no provider symbol)
 
-Funds like Länsförsäkringar Global Index (asset 4, SE0005188836) and Stockholm stocks like
-Cibus (asset 6, CIBUS) have no working provider sync, so prices must be found and saved
-with `save_price`:
-
-- Swedish mutual funds — official/latest NAV: `https://lf.fondlista.se/sv/1/details/<ISIN>`;
-  daily NAV history (~1 month, plain HTML table): `https://markets.ft.com/data/funds/tearsheet/historical?s=<ISIN>:SEK` (works with web_extract).
-- Stockholm-listed stocks — FT tearsheets 404; use Yahoo's chart API via terminal curl:
-  `https://query1.finance.yahoo.com/v8/finance/chart/<TICKER>.ST?range=3mo&interval=1d` (no auth needed with a browser User-Agent). Verify plausibility against an existing manual row.
-- Fund NAVs publish T+1 (bryttid 15:00); the "latest" is usually yesterday's date. For same-day stock closes, check `regularMarketTime` vs Stockholm close (17:30 CET) before treating an intraday value as a close.
-- Pitfall: NAVs get recorded one day late easily (a NAV published on day X is day X-1's close). Verify the date column, not the publish date.
-- Batch backfills (>15 rows): don't spend one tool_call per row — POST JSON-RPC straight to the jarvis MCP endpoint (`http://127.0.0.1:3000/mcp`, streamable HTTP: initialize → notifications/initialized → tools/call `save_price`, tool names un-namespaced, Mcp-Session-Id header). See scratch pattern: assert each response's date/price, then read back with `list_prices`.
+Some holdings have no usable provider symbol, so their prices must be found on the web and saved
+with `save_price`. Which assets those are on this install is in the profile file; the sources,
+the T+1 date traps and the raw-MCP batch-backfill handshake are in
+`references/price-history-web.md` — read it before hunting for a price, and remember a saved
+price is a dated snapshot, never a quote.
 
 ## Recording dividends (`save_dividend`)
 
@@ -74,21 +117,23 @@ rows the UI dividend dialog creates, and the same rows `list_dividends` reads ba
   (it updates the row in place and keeps notes/shares unless you pass new ones).
 - Always verify by reading back with `list_dividends`, and mention the recorded date + amount.
 - Dividends live in the investment ledger ONLY: never ALSO book the same payment with
-  `save_cash_flow_entry` — cash flow would double-count that income. Exception: if Tiago explicitly
-  wants his monthly cash income to include dividends in the Cash Flow view, use ONE `save_cash_flow_entry`
-  income row per month per currency (e.g. category "Dividends") summarising what `list_dividends`
-  already recorded, and say so in the answer — never one entry per payment.
+  `save_cash_flow_entry` — cash flow would double-count that income. Exception: only when the
+  user has asked for it (it would be recorded in the profile file), summarise monthly dividend
+  income as ONE `save_cash_flow_entry` income row per month per currency (e.g. category
+  "Dividends") over what `list_dividends` already holds, and say so in the answer — never one
+  entry per payment.
 
-- Convention: record on the PAY date (when Nordnet settles), amount = the actual SEK settlement
-  from the user's Nordnet CSV/app — published per-share web figures (stockanalysis, fiscal.ai,
-  mfn.se) differ from Nordnet's settlement by ±1-2% because Nordnet converts EUR→SEK at its own
-  rate. Use web sources only to identify which dividend was paid (ex-date/pay-date/per-share);
-  ask the user for the settlement amount rather than estimating.
-- Cibus pays MONTHLY (ex-date ~25th/26th, pay ~3rd/8th); declared in EUR (~€0.07-0.08/share).
+- Convention: record on the date the **broker settles** (the pay date), at the actual settlement
+  amount in the account currency. Published per-share figures are converted at the broker's own
+  rate and run ±1-2% off, so use web sources only to identify *which* dividend was paid, and ask
+  the user for the amount instead of estimating.
+- Per-asset payout cadence (monthly vs quarterly, ex/pay dates, declared currency) and the
+  settlement convention for a specific broker are facts about the user's holdings: they live in
+  `references/import-profile.md` and `references/import-broker-export.md`, not here.
 
 ## Cash-flow ledger (`get_cash_flow_summary`, `save_cash_flow_entry`, ...)
 
-The Cash Flow ledger is Tiago's own record of income and spending, kept separate from the
+The Cash Flow ledger is the user's own record of income and spending, kept separate from the
 investment ledger: entries never change holdings, dividends, or net worth, and portfolio
 activity never generates them. It shows only what was recorded — absence is not evidence of
 no spending. Tools: `get_cash_flow_summary` (one month, per currency), `list_cash_flow_transactions`
@@ -107,14 +152,51 @@ no spending. Tools: `get_cash_flow_summary` (one month, per currency), `list_cas
 - It is NOT idempotent: every call adds a row, and buying coffee twice in a day is legitimate.
   After an unclear response, check `list_cash_flow_transactions` before re-saving — do not
   assume a retry is safe.
-- Only save what Tiago (or a statement he provides) actually states: an amount, a date, and
+- Only save what the user (or a statement they provide) actually states: an amount, a date, and
   which account paid. Confirm those before writing; never estimate or auto-categorize spending.
 - `update_cash_flow_entry` and `delete_cash_flow_entry` work by id from the list output.
   Show the date/amount/category and get an explicit yes before deleting.
 - Categories: reuse the defaults when one fits (`list_cash_flow_categories`, which includes
-  `entry_count`); `save_cash_flow_category` is idempotent per name + kind. Retire a used
+  `entry_count`); `save_cash_flow_category` is idempotent per name + kind and returns
+  `{action, category:{id,...}}` (unwrap `.category.id`). Retire a used
   category with `update_cash_flow_category` `active=false` — used categories cannot change kind
   and are never deleted, so history stays categorized.
+- Which categories this user actually uses — and which seeded defaults were deliberately
+  retired — is in `references/import-profile.md`. Never assume the defaults are all live, and
+  never add a personal taxonomy to this skill; `list_cash_flow_categories` gives the current set.
+- Pitfall: the user edits entries and categories directly in the jarvis UI between agent runs.
+  Never batch-update from remembered or hardcoded state — re-fetch `list_cash_flow_transactions`
+  live, select by current `category_id`, and trust what the tool returns over earlier assumptions.
+
+## Importing statements and exports
+
+Every import starts the same way: read `references/import-profile.md` for the personal half
+(which statement belongs to which account, which rows are not spending, how transfers are booked,
+which merchant pairs are already confirmed), then open the recipe for the format at hand —
+`references/import-card-statement-pdf.md`, `references/import-bank-csv.md` or
+`references/import-broker-export.md`. Those files carry the per-format detail — column layouts,
+label strings, encoding traps — described by **shape, not by issuer**: which bank, card or broker
+produces that shape, and the literal tag strings already written into this user's rows, belong in
+the profile, because everything except the profile is committed. This section holds only the
+invariants that hold for any format:
+
+- **Names, never remembered ids.** Resolve accounts, categories and assets live — this user
+  edits them in the jarvis UI between runs, so a written-down id is a hypothesis.
+- **Checksum before writing,** against the statement's own totals, to the smallest currency
+  unit. A mismatch means re-parse; never write first and reconcile later.
+- **Transfers are not spending.** Payments onto a card, own-account moves and internal broker
+  transfers get skipped, or the same money is counted twice.
+- **Never silently auto-categorise.** Use pairs the user already confirmed; propose the rest,
+  get an explicit OK, then append the new pair **to the profile file**.
+- **Guard against a re-import before writing,** with `list_cash_flow_transactions`: neither
+  `save_cash_flow_entry` nor the REST endpoints are idempotent. A description tag only works as a
+  guard if it is unique per statement — broker exports are (per-row id), bank rows often are not,
+  so match `(date, amount, payee)` there. Use the tag strings the profile records verbatim.
+- **Batch long writes** through the raw MCP endpoint rather than one tool call per row
+  (handshake in `references/price-history-web.md`), and on REST failures print the **full**
+  server error — it names the offending field, and truncating it has hidden the cause before.
+- **Read back and report** entry count and sums against the statement. "Done" without a read-back
+  is not a result.
 
 ## Recording FX rates (`save_fx_rate`)
 
