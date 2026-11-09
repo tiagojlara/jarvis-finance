@@ -217,7 +217,9 @@ export function CashFlow({ data, onAdd, onDelete, onEdit, navigate, revision = 0
       ]; }).flat()}
       {!currenciesInUse.length && <Metric label="RECORDED CASH FLOW" value="—" detail={`Nothing recorded for ${periodLabel} yet. Income and spending you add show up here.`}/>}
     </div>
-    <SummaryCard placement="cashflow" period={month} title={`Jarvis summary · ${monthLabel(month)}`} navigate={navigate} revision={revision}/>
+    // The card owns the period label, so the month reads the same way in its heading and in the
+    // sentence the model writes about it.
+    <SummaryCard placement="cashflow" period={month} title="Jarvis summary · cash flow" navigate={navigate} revision={revision}/>
     <div className="content-grid content-grid-main">
       <Section title={`Spending by category · ${periodLabel}`} className="cashflow-breakdown" action={categoryFilter ? <button type="button" className="text-action" onClick={() => setCategoryFilter('')}>Clear filter</button> : undefined}>
         {expenseRows.length ? <div className="flow-breakdown-grid">{currenciesInUse.map((currency) => { const rows = expenseRows.filter((row) => row.currency === currency); return rows.length ? <div className="flow-breakdown-card" key={currency}><div className="flow-breakdown-heading"><span>Spending</span><b>{currency}</b></div><FlowCategoryChart rows={rows} currency={currency} kind="expense" selectedCategory={categoryFilter} onSelectCategory={setCategoryFilter}/></div> : null; })}</div> : <Empty>No spending recorded for this period. Add an expense entry to see where it went.</Empty>}

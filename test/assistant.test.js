@@ -538,6 +538,89 @@ test('summaries are generated on demand, cached, and marked stale when the data 
   assert.equal((await request(`assistant/summaries?placement=cashflow&period=${MONTH}`)).payload.cached, null);
 });
 
+// The card's job is to interpret, and a small local model that interprets by doing arithmetic is
+// how currencies get merged. So every share, percentage and comparison the card may cite is
+// computed here and handed over ready to read — these tests pin that contract.
+test('summary indicators are computed by the app so the card never has to do arithmetic', async (t) => {
+  const { request, configure, model, close } = await startAssistant({ answer: 'LEAD: Two thirds of your EUR value sits in one fund.' });
+  t.after(close);
+  const daysAgo = (count) => new Date(Date.now() - count * 86400000).toISOString().slice(0, 10);
+
+  const account = await request('accounts', { method: 'POST', body: { name: 'Brokerage', currency: 'EUR' } });
+  const accountId = account.payload.id;
+  const asset = (name, type) => request('assets', { method: 'POST', body: { name, type, currency: 'EUR' } });
+  const big = (await asset('Big Fund', 'Fund')).payload;
+  const small = (await asset('Small Stock', 'Equity')).payload;
+  const blind = (await asset('Unpriced ETF', 'ETF')).payload;
+  for (const assetId of [big.id, small.id, blind.id]) {
+    assert.equal((await request('transactions', { method: 'POST', body: { account_id: accountId, asset_id: assetId, kind: 'buy', date: '2024-01-02', quantity: 10, unit_price: 10, currency: 'EUR' } })).status, 200);
+  }
+  // 300 EUR valued and fresh; 50 EUR valued on a price the card should flag as old.
+  await request('prices', { method: 'POST', body: { asset_id: big.id, date: daysAgo(3), price: 30, currency: 'EUR', source: 'Manual' } });
+  await request('prices', { method: 'POST', body: { asset_id: small.id, date: daysAgo(60), price: 5, currency: 'EUR', source: 'Manual' } });
+  await request('dividends', { method: 'POST', body: { asset_id: big.id, account_id: accountId, date: daysAgo(30), amount: 40, currency: 'EUR' } });
+  await request('dividends', { method: 'POST', body: { asset_id: big.id, account_id: accountId, date: daysAgo(120), amount: 20, currency: 'EUR' } });
+
+  await request('cash_flow_transactions', { method: 'POST', body: { account_id: accountId, category_id: (await request('cash_flow_categories')).payload.find((row) => row.name === 'Salary').id, kind: 'income', date: `${MONTH}-05`, amount: 3200, currency: 'EUR' } });
+  const housing = (await request('cash_flow_categories')).payload.find((row) => row.name === 'Housing' && row.kind === 'expense');
+  await request('cash_flow_transactions', { method: 'POST', body: { account_id: accountId, category_id: housing.id, kind: 'expense', date: `${MONTH}-06`, amount: 800, currency: 'EUR' } });
+  await configure();
+
+  const held = await request('assistant/summaries', { method: 'POST', body: { placement: 'overview' } });
+  assert.equal(held.status, 200, JSON.stringify(held.payload));
+  const portfolio = JSON.parse(model.calls.at(-1).body.messages.at(-1).content.replace(/^Records snapshot[^\n]*\n/, ''));
+  const eur = portfolio.indicators.per_currency.EUR;
+  assert.equal(eur.total_value, 350, 'the two priced positions, nothing else');
+  assert.equal(eur.positions, 3);
+  assert.equal(eur.positions_valued, 2);
+  assert.equal(eur.largest_position.name, 'Big Fund');
+  assert.equal(eur.largest_position.share_pct, 85.7, 'a share of the EUR total, computed here');
+  assert.equal(eur.top3_share_pct, 100);
+  assert.equal(eur.cash_share_pct, 0);
+  assert.equal(eur.unrealized_return_pct, 75, 'gain over cost basis of the priced rows');
+  assert.equal(eur.best_position.gain_pct, 200);
+  assert.equal(eur.worst_position.gain_pct, -50);
+  assert.equal(portfolio.indicators.coverage.holdings_without_price[0].name, 'Unpriced ETF');
+  assert.ok(portfolio.indicators.coverage.stale_prices.some((row) => row.name === 'Small Stock' && row.days_old > 30), 'an old price is a gap the card can name');
+  assert.equal(portfolio.indicators.dividends.by_currency.EUR.last_90_days, 40);
+  assert.equal(portfolio.indicators.dividends.by_currency.EUR.previous_90_days, 20);
+  assert.equal(portfolio.indicators.dividends.by_currency.EUR.change_pct, 100, 'the quarter-over-quarter trend the page does not chart');
+  assert.equal(portfolio.indicators.scope.includes('one currency'), true);
+
+  const month = await request('assistant/summaries', { method: 'POST', body: { placement: 'cashflow', period: MONTH } });
+  assert.equal(month.status, 200, JSON.stringify(month.payload));
+  const flow = JSON.parse(model.calls.at(-1).body.messages.at(-1).content.replace(/^Records snapshot[^\n]*\n/, ''));
+  const eurFlow = flow.indicators.per_currency.EUR;
+  assert.equal(eurFlow.income, 3200);
+  assert.equal(eurFlow.expense, 800);
+  assert.equal(eurFlow.savings_rate_pct, 75, 'the headline number of the month, pre-computed');
+  assert.equal(eurFlow.top_spending_category.name, 'Housing');
+  assert.equal(eurFlow.top_spending_category.share_pct, 100);
+  assert.equal(eurFlow.largest_entry.amount, 3200);
+  assert.equal(eurFlow.change_vs_previous_pct.income, null, 'no previous month means no comparison, not a zero');
+  assert.equal(flow.indicators.months_with_records, 1);
+  assert.equal(flow.indicators.pace.EUR.days_in_month, new Date(Date.UTC(Number(MONTH.slice(0, 4)), Number(MONTH.slice(5, 7)), 0)).getUTCDate());
+});
+
+// The prompt is the difference between a card that reads the chart back and one that comments on
+// it, so its contract is asserted rather than trusted.
+test('the summary prompt asks for a labelled reading, not a recitation of the totals', async (t) => {
+  const { request, configure, model, close } = await startAssistant({ answer: 'LEAD: steady.\nWATCH: one fund is 85.7% of EUR.' });
+  t.after(close);
+  await configure();
+  await request('assistant/summaries', { method: 'POST', body: { placement: 'overview' } });
+  const system = model.calls[0].body.messages[0].content;
+  assert.match(system, /already charts the totals[\s\S]*Do not read them back/);
+  assert.match(system, /LEAD: /);
+  assert.match(system, /WATCH: /);
+  assert.match(system, /USE THE "indicators" BLOCK/);
+  assert.match(system, /Never tell the user to buy, sell, hold, rebalance/);
+  assert.match(system, /Today is \d{4}-\d{2}-\d{2}/);
+  assert.match(system, /concentration inside each currency/, 'the overview is pointed at the angles that matter');
+  await request('assistant/summaries', { method: 'POST', body: { placement: 'cashflow', period: MONTH } });
+  assert.match(model.calls.at(-1).body.messages[0].content, /savings rate/);
+});
+
 test('a summary failure is reported as an actionable message, not a broken card', async (t) => {
   const { request, configure, close } = await startAssistant();
   t.after(close);
