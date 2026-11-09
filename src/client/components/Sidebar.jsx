@@ -5,6 +5,7 @@ const pages = [
   ['networth', '⌂', 'Net worth'],
   ['activity', '↕', 'Activity'], ['dividends', '◌', 'Dividends'],
   ['cashflow', '⇄', 'Cash flow'],
+  ['assistant', '✦', 'Ask Jarvis'],
   ['planning', '⌁', 'Retirement plan'],
   ['settings', '⚙', 'Settings & backup'],
 ];
