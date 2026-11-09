@@ -12,6 +12,7 @@ const { z } = require('zod');
 const { McpServer } = require('@modelcontextprotocol/sdk/server/mcp.js');
 const { StreamableHTTPServerTransport } = require('@modelcontextprotocol/sdk/server/streamableHttp.js');
 const { summaryResponse, cashFlowEntryError, cashFlowCategoryError } = require('../routes/portfolio');
+const { cashFlowMonthSummary } = require('../cashflow-summary');
 
 const DATE = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'expected YYYY-MM-DD');
 const MONTH = z.string().regex(/^\d{4}-\d{2}$/, 'expected YYYY-MM');
@@ -286,38 +287,7 @@ function buildToolServer(db) {
     description: 'One month of cash flow: income, spending, and net per currency (never converted), plus per-category breakdowns. month is YYYY-MM; defaults to the current month. Counts only recorded cash-flow entries — investment transactions and dividends are not included.',
     inputSchema: { month: MONTH.optional() },
     annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
-  }, async ({ month }) => {
-    const target = month || new Date().toISOString().slice(0, 7);
-    const rows = db.prepare("SELECT kind, currency, amount, category_id FROM cash_flow_transactions WHERE substr(date, 1, 7) = ?").all(target);
-    const round = (x) => Math.round(x * 100) / 100;
-    const totals = {};
-    for (const row of rows) {
-      const t = totals[row.currency] || { income: 0, expense: 0 };
-      t[row.kind] += row.amount;
-      totals[row.currency] = t;
-    }
-    for (const [currency, t] of Object.entries(totals)) {
-      totals[currency] = { income: round(t.income), expense: round(t.expense), net: round(t.income - t.expense) };
-    }
-    const categoryNames = new Map(db.prepare('SELECT id, name FROM cash_flow_categories').all().map((c) => [c.id, c.name]));
-    const byCategory = (kind) => {
-      const acc = new Map();
-      for (const row of rows.filter((r) => r.kind === kind)) {
-        const key = `${row.currency}|${row.category_id}`;
-        const item = acc.get(key) || { category_id: row.category_id, name: categoryNames.get(row.category_id) || '(unknown)', currency: row.currency, total: 0, entries: 0 };
-        item.total += row.amount; item.entries += 1;
-        acc.set(key, item);
-      }
-      return [...acc.values()].map((i) => ({ ...i, total: round(i.total) })).sort((a, b) => b.total - a.total);
-    };
-    return jsonContent({
-      month: target,
-      entries: rows.length,
-      totals_by_currency: totals,
-      spending_by_category: byCategory('expense'),
-      income_by_category: byCategory('income'),
-    });
-  });
+  }, async ({ month }) => jsonContent(cashFlowMonthSummary(db, month)));
 
   server.registerTool('save_cash_flow_entry', {
     description: 'Record one cash-flow entry (income or spending) against a shared account, like the UI form. The entry currency is ALWAYS the account currency (from list_accounts) — do not pass or convert it. category_id must be an active category of the same kind (list_cash_flow_categories). NOT idempotent: every call inserts a new row, and legitimate same-day/same-amount duplicates exist, so before retrying an unclear response check list_cash_flow_transactions instead of blind-saving.',
