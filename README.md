@@ -1,95 +1,52 @@
-# Tamanduá Finance · Personal portfolio planner
+# Tamanduá Finance
 
 <p align="center">
   <img src="public/tamandua-logo.png" alt="Logo Tamanduá" width="520">
 </p>
 
-A local-first personal investment tracker and retirement planning tool. It is for tracking and scenario exploration, not financial advice, and it does not trade.
+**A private, local-first workspace for understanding your finances and exploring your financial future.**
 
-The interface uses React components, Recharts for responsive interactive charts, Vite for the local development server and production bundle, and Tailwind CSS v4 through its Vite plugin. The API remains a local Express server backed by SQLite.
+Track investments, cash flow, net worth, and retirement scenarios in one place. Tamanduá runs on your computer, stores its data in a local SQLite database, and does not trade or provide financial advice.
 
-## Requirements and setup
+## What you can do
 
-- Node.js 20.19 or later and npm (Vite's current release requires a recent Node runtime).
-- On Apple Silicon, check `node -p "process.arch"`; it should print `arm64`. If the shell still finds an Intel Node first, run `export PATH="/opt/homebrew/opt/node/bin:$PATH"` in that terminal, then open a new terminal or add the same line to `~/.zprofile`.
-- From this folder, run `npm install`, then `npm run dev`.
-- Open [http://localhost:5173](http://localhost:5173). The browser UI and SQLite API both bind to localhost.
-- Run `npm test` for the calculation tests. To create a production bundle, run `npm run build`, then `npm start` and open [http://localhost:3000](http://localhost:3000).
-- React components and shared API helpers live under `src/client/`; Vite builds them into `dist/`, which Express serves in production.
+- **Track your portfolio:** organize accounts and assets, record transactions and dividends, and enter dated prices manually.
+- **Understand your cash flow:** record income and spending by account and category, with totals kept in each account's currency.
+- **See your net worth:** combine investments and cash with manually valued property, vehicles, and loans.
+- **Explore retirement scenarios:** adjust contributions, returns, and inflation assumptions to see illustrative projections.
+- **Ask questions about your records:** optionally connect a compatible model endpoint to get read-only explanations and summaries.
+- **Work across currencies:** use EUR, SEK, USD, and BRL, with optional historical exchange rates from Frankfurter.
 
-No cloud account or analytics are configured. CopilotKit telemetry is disabled by default (`COPILOTKIT_TELEMETRY_DISABLED=1`, `DO_NOT_TRACK=1`); setting either variable to another value opts into the library's telemetry. Asset prices are entered manually — through the price dialog or recorded by an MCP agent — and the app never calls a price provider. Historical FX sync uses the selected Frankfurter source only when you request a sync; it sends the currency list and a date range, never holdings or amounts. The interface uses system fonts and does not load third-party assets. The one opt-in exception is the assistant, which talks to a model endpoint **you** configure (see **Ask Tamanduá**); with nothing configured it sends nothing anywhere.
+## Privacy by default
 
-No `.env` is required for normal use: the file is still supported for `PORT` and `DATA_DIR` if you want to override them, and is ignored by Git.
+Your financial records stay in a local SQLite database. The app does not use analytics, connect to a price feed, or send data to a cloud service by default. Historical exchange-rate sync sends only the currencies and date range requested. The optional assistant sends your question, conversation context, and relevant records to the model endpoint you configure; you choose whether to enable it.
 
-## MCP server for external agents (optional)
+Backups and exports contain personal financial information. Keep them private. See **Settings & backup** in the app to download or restore a backup.
 
-The API also serves a Model Context Protocol (MCP) endpoint at `/mcp` (Streamable HTTP, JSON-RPC) so agents that speak MCP — for example [Nous Research Hermes Agent](https://hermes-agent.nousresearch.com/docs/user-guide/features/mcp) — can read the portfolio and record routine entries with their own tools. Nothing needs configuring: no token, no environment variable. It listens only where the app itself listens (`127.0.0.1`, port 3000 in dev and production), so any local process on this machine can reach it and nothing off-machine can. Treat local-disk access as the trust boundary.
+## Get started
 
-The exposed tools are read views (`get_summary`, `list_accounts`, `list_assets`, `list_transactions`, `list_dividends`, `list_prices`, `list_fx_rates`, `list_cash_balances`, `get_net_worth`, `list_cash_flow_categories`, `list_cash_flow_transactions`, `get_cash_flow_summary`) and writes: `save_price` records a dated **Manual** price and replaces only another Manual row for the same asset and date, never a provider-sourced row; `save_fx_rate` upserts a dated Manual FX rate, which later provider syncs will not overwrite (matching the Manual-wins rule used by the UI); `save_dividend` records a dated dividend payment like the UI dialog — it is idempotent per asset + date (a repeat of the same amount returns the existing row) and refuses to overwrite an already-recorded amount unless the caller passes `replace: true` after confirming with the user. The full cash-flow ledger is exposed too: `save_cash_flow_entry`, `update_cash_flow_entry`, `delete_cash_flow_entry`, `save_cash_flow_category`, and `update_cash_flow_category` apply exactly the validation the UI form enforces (entry currency always follows the account, categories must be active and match the entry kind, used categories are deactivated rather than deleted). `save_cash_flow_entry` is not idempotent — repeated spending on the same day is legitimate, so every call adds a row. Accounts, assets, investment transactions, cash balances, physical assets, loans, settings, backup, and restore remain unwritable through MCP, and deletes reach nothing outside the cash-flow ledger.
+Requires Node.js 20.19 or newer and npm.
 
-Point Hermes at it with a config entry like:
-
-```yaml
-mcp_servers:
-  tamandua:
-    url: http://127.0.0.1:3000/mcp
+```sh
+npm install
+npm run dev
 ```
 
-This repository also ships a Hermes **skill** at `.hermes/skills/tamandua/SKILL.md` that teaches agents the app's semantics before they touch the tools: per-currency totals are never pre-converted, prices are dated snapshots and never live quotes, Manual rows are replaced but provider rows never are, and answers stay scenario tracking, not advice. Hermes discovers project-local skills when it works in this folder (after you grant the folder trust); to make the skill available in every Hermes session regardless of working directory, copy it into the global tree: `cp -R .hermes/skills/tamandua ~/.hermes/skills/`. Skills install by folder copy — there is no separate build step, and MCP servers themselves are configured in Hermes' `config.yaml`, not bundled inside plugins.
+Open [http://localhost:5173](http://localhost:5173). The app and its API listen on this computer only. No `.env` file or cloud account is required.
 
-The skill is deliberately split in two kinds of file. `SKILL.md` carries **method only** — app semantics and import invariants that would apply to anyone's ledger — while format-specific depth lives in `references/` topic files that load on demand (card-statement PDFs, bank CSVs, broker exports, web price sourcing). The one exception is `references/import-profile.md`, which holds the **personal** half: account mappings, category choices, merchant→category pairs and preferences. It is gitignored and stays on this machine, so the skill stays shareable and reviewable without carrying anyone's bank details. A fresh clone therefore has no profile: the skill instructs the agent to ask and build one rather than write answers into `SKILL.md`. Note that a plain `cp -R` to the global tree copies that personal file along with it — exclude it if you share the skill: `rsync -a --exclude import-profile.md .hermes/skills/tamandua/ ~/.hermes/skills/tamandua/`.
+To run a production build locally:
 
-Privacy note: this endpoint sends nothing out by itself. What leaves the machine is whatever the agent's **model** does with tool results — ask an agent backed by a cloud model about your holdings and those numbers travel to that provider. Paired with a local model (Ollama/vLLM), the loop stays entirely on the machine. Hermes-side tool filters (see its MCP config reference) can further restrict what the agent may call.
+```sh
+npm run build
+npm start
+```
 
-## Ask Tamanduá: the in-app assistant (optional)
+## Optional: connect an MCP agent
 
-Nothing is configured and nothing is sent until you set it up. **Settings & backup → Model endpoint and assistant** takes an OpenAI-compatible endpoint: base URL, model identifier, API token. Open the assistant from the floating Tamanduá button on any page or the **Ask Tamanduá** page; **Overview** and **Cash flow** each carry a summary card.
+Tamanduá includes a local MCP endpoint at `http://127.0.0.1:3000/mcp` for compatible agents. It can read portfolio data and record selected routine entries, including manual prices and cash-flow transactions. It is unauthenticated and intended for local use; only connect agents you trust. If an agent uses a cloud model, information returned by its tools may be sent to that model provider.
 
-Requests are proxied by the local server: the browser posts the question to the assistant endpoint at `/api/copilotkit` (a [CopilotKit](https://www.copilotkit.io/) runtime speaking the AG-UI protocol), the server calls the model endpoint, and the answer streams back as server-sent events on that same URL. The token never reaches browser code, and no assistant state is served by `/api/settings` or carried by the JSON backup. LangChain pulls `langsmith` in as a transitive dependency — it stays inert here, since tracing only activates if **you** set `LANGSMITH_TRACING` and an API key; nothing the assistant does reports to LangSmith on its own.
+## Scope and assumptions
 
-The CopilotKit chat is lazy-loaded. The production build measured the chat/runtime chunk at **258.05 kB gzip** and the main app entry at **95.71 kB gzip**; the dependency guard in `test/dependencies.test.js` keeps the chat runtime out of the entry bundle.
+Tamanduá is for personal tracking and scenario exploration, not investment, tax, or financial advice. Prices and asset valuations are manual snapshots; exchange rates are historical reference rates, not live trading quotes. Projections are illustrative and exclude taxes, costs, and market variability. Brokerage connections, bank syncing, and automatic price feeds are not included.
 
-The token is encrypted at rest (AES-256-GCM) in a settings record of its own, with the key held **outside** the database, resolved in this order: `TAMANDUA_ASSISTANT_KEY` (64 hex characters — for headless machines, CI, or a secret manager you already run; the former `JARVIS_ASSISTANT_KEY` name remains accepted), the existing macOS Keychain item `jarvis-finance-assistant` / `model-endpoint-key`, then a key file at `TAMANDUA_ASSISTANT_KEY_FILE` (default `~/.config/jarvis-finance/assistant.key`, created `0600`, refused if it would land inside the data directory; the former `JARVIS_ASSISTANT_KEY_FILE` name also remains accepted). The internal Keychain item and default key-file path stay stable so saved credentials continue to decrypt after the rebrand. Settings shows which source is in use and when a token was saved, and lets you replace or clear it — the saved value is never displayed, in either direction. Each ciphertext records which source made its key and decryption asks only that source, so switching sources later cannot silently render an existing token unreadable.
-
-Endpoint policy: `https` anywhere; plain `http` only for a localhost endpoint, which is what Ollama, LM Studio and vLLM speak. A remote `http` endpoint stays blocked until you tick **allow insecure HTTP**, because a model request carries your records in its context and a cleartext path to it deserves an explicit decision. A localhost endpoint keeps the whole loop on this machine. `TAMANDUA_ASSISTANT_TIMEOUT_MS` raises the 120-second request budget for a local model that is still loading; `JARVIS_ASSISTANT_TIMEOUT_MS` remains accepted for existing setups.
-
-Before the first request the app states what leaves the machine and requires an acknowledgement; the server refuses without it (HTTP 428) and the question is kept, not retyped. What goes out to that endpoint is the question, the earlier turns of the same conversation, and the records the read tools return. The disclosure text is served by the app, and per-tool switches plus "delete all conversations" are on the same settings panel.
-
-The assistant is **read-only**, enforced in three places rather than in a prompt: the model is only ever *offered* the twelve read tools (`get_summary`, `list_accounts`, `list_assets`, `list_transactions`, `list_dividends`, `list_prices`, `list_fx_rates`, `list_cash_balances`, `get_net_worth`, `list_cash_flow_categories`, `list_cash_flow_transactions`, `get_cash_flow_summary`) — a write tool never reaches its tool list, and each read can be switched off individually; any call outside that allowlist is refused **before it runs** and reported to you rather than swallowed; and tool output is wrapped in a labelled data envelope telling the model that records are not instructions, so text planted in a payee or description cannot authorize a tool or change policy. Writes stay where they were: the UI forms and the `/mcp` server for external agents, with the same validation. Being an MCP *client* of `/mcp` is a separate capability from exposing `/mcp`, and the server's published descriptions and safety semantics are unchanged.
-
-History and cached summaries live in dedicated `assistant_*` tables, deliberately outside `/api/:table` and `/api/backup`: a backup file is meant to be copied somewhere else, and a transcript of financial questions is not. Delete a single message, one conversation, or everything, from either page. Deleting history cannot touch a financial record — those tables have no foreign keys into the portfolio, and no code path from chat reaches one.
-
-Summary cards never generate on page load. Each costs one request, built from the same aggregation the page itself displays (per currency, never pre-converted), then caches the text with a visible timestamp. Staleness is a structural digest of the rows that card was built from, so saving a price or recording an entry marks it stale immediately while reopening the page costs nothing.
-
-What a card says is deliberately **not** a reading of the chart underneath it — the page already shows those totals. The app computes the comparisons first (share of a currency held by the largest position, cash versus invested, return against cost basis, dividends this quarter against last, holdings with no price or no rate; savings rate, category concentration, the month against its predecessor and the current pace) and hands those numbers to the model, which is asked to interpret them and forbidden from doing its own arithmetic or merging currencies. The reply comes back as a verdict line plus marked observations — *Looking good*, *Worth a look*, *Missing* — and observations about your records are never framed as buy or sell advice. A summary cached before this format existed still renders, as plain text.
-
-Server-side this is `src/assistant/` — settings and secrets, endpoint policy, the MCP client connection, the read-only guard, prompts, history, summary fingerprints, and its HTTP surface — covered by `test/assistant.test.js`, which runs against a local fake endpoint and the app's own `/mcp` and never reaches the network. Phase one excludes document uploads, data imports, and any write to Tamanduá records through the assistant. Answers are a reading of your own records, not financial or tax advice.
-
-## Data and currencies
-
-The SQLite database is `data/portfolio.sqlite` (override the directory with `DATA_DIR`). Back up regularly using **Settings & backup → Download full backup**. Restore replaces the records in the database. CSV export includes the current holdings summary. Keep exported backups private; they contain financial details.
-
-EUR, SEK, USD, and BRL are supported. Transactions, prices, and dividends retain their original currency. The home currency can be changed from the overview or retirement assumptions. Enter dated exchange rates manually, or select Frankfurter blended or its ECB reference source and choose **Sync historical FX rates**. Sync stores daily EUR-based rates locally for the date range from the earliest activity through today; the app derives cross-rates as needed. Frankfurter requires no API key, charges no fee, publishes daily historical reference rates, and has no daily or monthly quotas, though it may throttle abusive request volume. Rates are not live trading quotes. Dashboard conversions use the latest rate on or before the valuation date. If rates are missing, combined home-currency valuation is marked incomplete. See [Frankfurter's API docs](https://frankfurter.dev/) for current provider details.
-
-## Prices and portfolio calculations
-
-Prices are dated entries with a source label. Asset prices are recorded manually now: add them in the price dialog, or let an MCP agent (like Hermes, see **MCP server**) save dated closes from your broker statement or a fund's published NAV. The app no longer contacts price providers; rows previously imported with provider labels (Alpha Vantage, Marketstack, "weekly close") stay in the database, keep valuing holdings, and are never rewritten or fetched over. The selected overview currency is applied to current totals and historical portfolio values. Historical chart points are computed from holdings on each transaction, dividend, and price date, using the most recent price and FX rate on or before that date. A date is omitted if any open holding lacks a price or conversion rate. The chart only represents invested holdings; cash not modeled as a cash asset is excluded. To build a meaningful trend, enter dated price snapshots over time and sync or enter matching FX rates. Multiple purchases are separate transactions. Cost basis uses moving weighted-average cost: purchase value plus fees increases basis, each partial sale removes the current average basis for the shares sold, and sale fees reduce realized proceeds. Unrealized gain/loss is current value minus remaining cost basis; realized gain is tracked in calculations but is not yet surfaced in the interface. Dividends are actual entries only; monthly history shows only recorded payments. Yield and dividend-growth metrics are omitted because there may not be enough history to calculate them responsibly.
-
-## Retirement assumptions
-
-Scenario values are illustrative nominal estimates using monthly contributions and annual return assumptions. They exclude tax, investment costs, and any return variability. Inflation is editable but displayed separately; it does not increase contributions in this version. The displayed income reference uses a simple 4% of projected assets per year divided by twelve; it is not a sustainable-income promise. Forecasts can differ greatly from actual results. Keep assumptions editable and avoid treating outputs as guarantees.
-
-## Scope notes
-
-The app supports accounts, assets, buy/sell and deposit/withdrawal/fee transactions, a manual cash-flow income-and-spending ledger maintained from the page or over MCP (see **Cash flow**), dated account or Cash-asset balance snapshots without trades, dated manual prices (UI or MCP), a dedicated dividend history page, manual FX rates, allocation, responsive Recharts visualizations, ROI and selectable history periods, projections, backup/restore, CSV export, and an optional read-only in-app assistant over a model endpoint you configure (see **Ask Tamanduá**). Brokerage integrations, automatic price-provider sync (removed November 2026 — manual entry and the MCP `save_price` tool replace sync, backfill, symbol search, and NAV file import), bank syncing or statement import for cash flow, taxes, bonds' accrued interest, corporate actions, and full cash-account reconciliation are not included. Assistant document upload, data import, and writes to your records through chat are also out of scope for now — the assistant reads and explains, you make the changes. Use demo data only if you explicitly select it; it is labeled and removable through the account/asset and activity screens.
-
-
-Cash balances are dated snapshots linked either to an account directly or to a Cash-type asset. Use one tracking method per account to avoid double-counting; a cash asset must use the account currency. The latest snapshot per account/cash asset contributes to current value, and historical charts use the most recent snapshot on or before each date. Period return is the change between the first and last portfolio valuations in the selected range; it is not adjusted for deposits or withdrawals. Unrealized ROI is unrealized gain divided by remaining cost basis, excluding cash and realized gains.
-
-## Cash flow
-
-The **Cash flow** page tracks income and spending in a ledger that is deliberately separate from the investment ledger. Entries use the same accounts as the portfolio — a brokerage, bank, or card account can hold investments and cash-flow records side by side; there is no separate cash-account list. Each entry has a date, income/expense type, amount, category, and account, with optional payee and description. Entries never create buy/sell activity and never change holdings, dividends, or net worth — and investment transactions never generate cash-flow entries, because the app cannot know whether a sale's proceeds were spent. Amounts stay in each account's currency, and totals (income, spending, net) are reported per currency without conversion; currency switching is a planned follow-up once rates are available for the entry dates. The default view is one month with prev/next navigation; the entry list can be filtered by account, type, category, and all time. Default categories (Salary, Housing, Food, Transport, and so on) are seeded only while the category table is empty, so renaming or clearing them is never silently reverted. Add, rename, or deactivate categories yourself; a category with entries is deactivated rather than deleted so history stays categorized. Entries are typed in through the page or recorded by an MCP agent (see **MCP server**) — there is no bank sync, statement import, budgets, or recurring entries — and the ledger shows only recorded activity, not complete account movement. Cash-flow tables are included in full JSON backups and restore cleanly; older backups without them restore as usual and regain the default categories.
-
-## Physical assets and loans
-
-Use **Net worth** to record property, vehicles, and other physical assets, then add dated manual valuations. Loans and mortgages are separate records and can link to a physical asset; record dated remaining-balance snapshots as you receive statements. The net-worth estimate combines the current investment/cash total with the latest physical valuations and subtracts latest recorded loan balances. It uses stored FX rates as of each record date and indicates when prices or rates are missing. These amounts are manual snapshots, not appraisals, amortization schedules, or live lender balances. Linked loans must use the physical asset's currency so the displayed asset equity is meaningful. Physical assets and debt do not enter investment ROI or retirement projections. These tables are included in full JSON backups.
+For technical details about the local API, assistant behavior, data model, and MCP tools, see the source code and `docs/agent-product-requirements.md`.
