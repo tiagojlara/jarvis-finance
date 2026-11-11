@@ -7,7 +7,7 @@ import { useTamandua } from '../tamanduaState.jsx';
 // The transcript itself is not here: it is the one chat surface the app has (components/TamanduaChat.jsx),
 // which renders into `tamandua-slot` below through a portal, so the same conversation can also float over
 // any other page from the launcher icon. What stays on this page is the part that is ours and has nothing
-// to do with streaming — the conversation list, the endpoint status, the read-only gates, and the FR-10
+// to do with streaming — the conversation list, the endpoint status and the FR-10
 // controls that let a person inspect and delete their own history.
 //
 // Keeping those here rather than inside the chat is also why this module imports no CopilotKit: the page
@@ -44,7 +44,7 @@ function ConversationRow({ conversation, active, onSelect, onRename, onDelete })
 // FR-10 asks that a person can inspect what was stored and delete any of it. The transcript is the
 // library's to render, so the row-by-row control lives beside it, read from the same SQLite rows the
 // chat was restored from — which means this list is also the place the full `toolActivity` record (args,
-// durations, refusals) is still legible, and the tool chips in the chat are the short version of it.
+// durations) is still legible, and the tool chips in the chat are the short version of it.
 function MessageList({ rows, onDelete }) {
   if (!rows.length) return <p className="panel-note">Nothing stored in this conversation yet.</p>;
   return <ul className="assistant-messages">

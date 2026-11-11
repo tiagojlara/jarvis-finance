@@ -2,10 +2,10 @@
 // invocation the summary cards run through.
 //
 // CopilotKit supplies the wire. It does not supply the brain. Every Tamandua answer still comes from
-// `assistant.run()` (src/assistant/agent.js), which owns the read-only guard, the MCP connection, the
-// decrypted token and the SQLite history — the guarantees in docs/agent-product-requirements.md
-// FR-3, FR-8 and §9 live there and are translated into AG-UI events by aguiBridge.js, not re-implemented
-// here. §13 keeps that separation explicit: adapters apart from UI, and the MCP server's safety
+// `assistant.run()` (src/assistant/agent.js), which owns tool activity tracking, the MCP connection, the
+// decrypted token and the SQLite history — the assistant's data handling and activity guarantees
+// live there and are translated into AG-UI events by aguiBridge.js, not re-implemented here.
+// Adapters stay separate from UI, and the MCP server's safety
 // semantics unchanged.
 //
 // Nothing in this file may put record data into a thread message: a thread's events are readable by

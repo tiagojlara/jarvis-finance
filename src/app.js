@@ -42,7 +42,7 @@ function createApp(options = {}) {
   // whatever prefix a mount matched — `app.use('/api/copilotkit', handler)` would leave `req.url` as
   // `/`, miss the registration, and fall through to the SPA catch-all with a 200 of HTML.
   // The real `tamandua` agent replaces the transport stand-in, and is built from the same collaborators the
-  // REST assistant uses — so the disclosure gate, the read-only guard and the SQLite history are one
+  // REST assistant uses — so the disclosure gate, tool activity tracking and SQLite history are one
   // implementation serving two transports, not two that can drift apart. Registered per request, because
   // the model token is decrypted for the request that needs it.
   // `hooks` carry the §9 disclosure gate. Both entry points are built from one options object, so this

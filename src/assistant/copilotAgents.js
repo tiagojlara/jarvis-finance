@@ -2,8 +2,8 @@
 //
 // copilotRuntime.js owns the wire and stays generic — it must be testable with a stand-in that has no
 // assistant behind it. This file is where that wire meets the app: it turns an AG-UI run request into one
-// call of `assistant.run()` and pipes the result through the bridge, so the agent loop, the read-only
-// guard, the token handling and the SQLite history all stay exactly where they were (§13:203 keeps the
+// call of `assistant.run()` and pipes the result through the bridge, so the agent loop, tool activity,
+// token handling and SQLite history all stay exactly where they were (§13:203 keeps the
 // provider and MCP adapters out of the UI; the same reasoning keeps them out of the transport).
 //
 // One fresh agent per request, built by the registry factory in copilotRuntime.js, closing over nothing

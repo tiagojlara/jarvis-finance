@@ -1,4 +1,4 @@
-// The LangChain agent: model client + Tamanduá MCP read tools + the read-only guard.
+// The LangChain agent: model client, all local Tamanduá MCP tools, and tool activity tracking.
 //
 // `stream()` with `streamMode: 'messages'` yields `[messageChunk, meta]` pairs (verified
 // against a local fake endpoint): model text arrives from the `model_request` node as
@@ -13,7 +13,7 @@
 
 const { createAgent } = require('langchain');
 const { createChatModel, sanitizeError } = require('./model');
-const { createReadOnlyGuard } = require('./readOnlyGuard');
+const { createToolMiddleware } = require('./toolMiddleware');
 const { chatSystemPrompt } = require('./prompts');
 const { AssistantInputError, ERROR_CODES } = require('./errors');
 
@@ -69,13 +69,13 @@ function createAssistant({ store, connection, history }) {
       tools = [];
     }
     if (!tools.length) {
-      yield { type: 'notice', message: 'Every Tamanduá tool is switched off in Settings, so I have no access to your records and cannot state any figures. Re-enable at least one tool to get grounded answers.' };
+      yield { type: 'notice', message: 'The local Tamanduá MCP server did not publish any tools, so I cannot access records for this answer. Check the MCP server and reconnect in Settings & backup → Assistant.' };
     }
 
     // Per-message activity: the guard records as it runs, and the same array is what the UI
     // sees live and what gets persisted with the answer for later inspection (FR-8, FR-10).
     const live = [];
-    const guard = createReadOnlyGuard({ onActivity: (entry) => live.push(entry) });
+    const guard = createToolMiddleware({ onActivity: (entry) => live.push(entry) });
     const agent = createAgent({
       model: model.client,
       tools,
@@ -135,12 +135,6 @@ function createAssistant({ store, connection, history }) {
 
     while (live.length > 0) yield { type: 'tool', activity: live.shift() };
     const content = parts.join('');
-    const refusals = guard.refusals;
-    if (refusals.length) {
-      // §9: an attempted write — by the model or provoked by text inside the records — is
-      // reported to the user rather than swallowed.
-      yield { type: 'notice', message: `${refusals.length} tool call${refusals.length === 1 ? '' : 's'} outside the read-only allowlist ${refusals.length === 1 ? 'was' : 'were'} refused: ${refusals.map((item) => item.tool).join(', ')}. Nothing was changed.` };
-    }
     const saved = history.addMessage({
       conversationId: chatId,
       role: 'assistant',
@@ -156,7 +150,6 @@ function createAssistant({ store, connection, history }) {
       text: content,
       model: model.model,
       activity: guard.activity,
-      refusals,
       aborted,
     };
   }

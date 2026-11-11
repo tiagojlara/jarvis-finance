@@ -5,7 +5,7 @@ const os = require('node:os');
 const path = require('node:path');
 const http = require('node:http');
 const { createApp } = require('../src/app');
-const { createReadOnlyGuard, isReadOnlyTool, READ_ONLY_TOOLS } = require('../src/assistant/readOnlyGuard');
+const { createToolMiddleware } = require('../src/assistant/toolMiddleware');
 const { normalizeEndpointUrl } = require('../src/assistant/endpoints');
 const { sanitizeError } = require('../src/assistant/model');
 const { COPILOT_BASE_PATH, eventsFromSse } = require('../src/assistant/copilotRuntime');
@@ -429,7 +429,7 @@ test('sanitizeError strips credentials and gives the user something to act on', 
 
 // ---- the local MCP connection ----------------------------------------------------------
 
-test('the app connects to its own MCP endpoint and exposes only the read tools', async (t) => {
+test('the app connects to its own MCP endpoint and exposes every MCP tool', async (t) => {
   const { request, close } = await startAssistant();
   t.after(close);
 
@@ -441,45 +441,29 @@ test('the app connects to its own MCP endpoint and exposes only the read tools',
   assert.equal(status.payload.tools.length, 20, 'the assistant sees the whole tool list and then filters it');
   assert.ok(names.includes('get_summary') && names.includes('list_cash_flow_transactions'));
 
-  // Drift guard: every tool the MCP server offers is deliberately classified. A new read tool
-  // has to be added to the allowlist, and a new write tool must stay off it, or this fails.
-  const writes = names.filter((name) => !isReadOnlyTool(name)).sort();
-  assert.deepEqual(writes, [
-    'delete_cash_flow_entry', 'save_cash_flow_category', 'save_cash_flow_entry', 'save_dividend',
+  // Every read and write tool published by the MCP server is available to the internal agent.
+  assert.deepEqual(names.sort(), [
+    'delete_cash_flow_entry', 'get_cash_flow_summary', 'get_net_worth', 'get_summary',
+    'list_accounts', 'list_assets', 'list_cash_balances', 'list_cash_flow_categories',
+    'list_cash_flow_transactions', 'list_dividends', 'list_fx_rates', 'list_prices',
+    'list_transactions', 'save_cash_flow_category', 'save_cash_flow_entry', 'save_dividend',
     'save_fx_rate', 'save_price', 'update_cash_flow_category', 'update_cash_flow_entry',
-  ]);
-  assert.deepEqual(READ_ONLY_TOOLS.slice().sort(), names.filter((name) => isReadOnlyTool(name)).sort());
-  assert.equal(status.payload.exposed, READ_ONLY_TOOLS.length);
+  ].sort());
+  assert.equal(status.payload.exposed, status.payload.tools.length);
 });
 
-test('tool switches change what the model is offered and cannot enable a write tool', async (t) => {
-  const { request, copilotChat, configure, model, close } = await startAssistant({ toolCalls: ['tamandua_get_summary'], answer: 'Totals are 3200.00 EUR.' });
+test('all MCP tools are offered to the internal agent', async (t) => {
+  const { copilotChat, configure, model, close } = await startAssistant({ toolCalls: ['tamandua_get_summary'], answer: 'Totals are 3200.00 EUR.' });
   t.after(close);
-  await seedCashFlow(request);
   await configure();
-  const off = await request('assistant/mcp/tools/get_summary', { method: 'PUT', body: { enabled: false } });
-  assert.equal(off.status, 200);
-  assert.deepEqual(off.payload.disabledTools, ['get_summary']);
-
-  // The allowlist lives in `agent.js`/the guard, not in the transport, so what this proves is that the one
-  // endpoint the app has goes through them rather than around them: the tool list in the outgoing request
-  // is built per run from the same store, and a client cannot offer itself a write tool by naming one on
-  // the wire (`tools: []` in the frame is ignored — the assistant supplies its own).
   const firstRun = model.calls.length;
   const viaCopilot = await copilotChat('what is my income this month');
   assert.equal(viaCopilot.runError, null, JSON.stringify(viaCopilot.events));
   const offered = model.calls[firstRun].body.tools.map((tool) => tool.function.name);
-  assert.equal(offered.includes('tamandua_get_summary'), false, 'a switched-off tool must not even be listed');
-  assert.ok(offered.includes('tamandua_list_cash_flow_transactions'));
-  assert.equal(offered.some((name) => /save_|update_|delete_/.test(name)), false, 'no write tool is ever offered');
-
-  const refused = await request('assistant/mcp/tools/save_dividend', { method: 'PUT', body: { enabled: true } });
-  assert.equal(refused.status, 400);
-  assert.match(refused.payload.error, /not a read-only Tamandua tool/i);
-
-  const backOn = await request('assistant/mcp/tools/get_summary', { method: 'PUT', body: { enabled: true } });
-  assert.equal(backOn.status, 200);
+  assert.equal(offered.length, 20);
+  assert.ok(offered.some((name) => /save_|update_|delete_/.test(name)));
 });
+
 
 test('turning the built-in connection off stops the assistant from answering', async (t) => {
   const { request, copilotChat, configure, model, close } = await startAssistant({ answer: 'I estimate you have about 10000' });
@@ -576,7 +560,7 @@ test('chat answers from a tool call, streams, and persists the exchange', async 
   assert.equal(viaCopilot.raw.includes(TOKEN), false, 'the token never reaches the wire');
 
   // The tool call really went to the local MCP endpoint, and the token stayed in the header.
-  assert.match(JSON.stringify(model.calls[0].body.messages), /READ-ONLY/, 'grounding rules travel with the request');
+  assert.match(JSON.stringify(model.calls[0].body.messages), /explicitly asks for/, 'tool-use rules travel with the request');
   assert.equal(model.calls[1].body.messages.some((message) => message.role === 'tool'), true, 'the tool result was fed back');
   assert.equal(JSON.stringify(model.calls[1].body.messages).includes(TOKEN), false);
   assert.equal(JSON.stringify(model.calls[1].body.messages).includes('tamandua_tool_data'), true, 'tool output is marked as data, not instructions (§9)');
@@ -590,41 +574,34 @@ test('chat answers from a tool call, streams, and persists the exchange', async 
   assert.ok(db.prepare('SELECT 1 FROM assistant_messages').get(), 'the exchange is in the app database, not in runtime memory');
 });
 
-test('a tool call outside the read-only allowlist is refused before it runs', async (t) => {
+test('the tool middleware allows writes and wraps all tool output as untrusted data', async (t) => {
   const { request, db, close } = await startAssistant();
   t.after(close);
   await seedCashFlow(request);
   const before = db.prepare('SELECT COUNT(*) AS n FROM dividends').get().n;
 
-  const guard = createReadOnlyGuard();
+  const middleware = createToolMiddleware();
   let executed = 0;
-  const handler = async () => { executed += 1; return { content: 'should never run' }; };
-  const refusal = await guard.middleware.wrapToolCall({ toolCall: { name: 'tamandua_save_dividend', args: { account_id: 1, amount: 500 }, id: 'x1' } }, handler);
-  assert.equal(executed, 0, 'refusing means not calling the tool at all (§9)');
-  assert.equal(refusal.status, 'error');
-  assert.match(refusal.content, /read-only/i);
-  assert.equal(guard.refusals[0].tool, 'save_dividend');
-  assert.equal(guard.activity[0].status, 'refused');
-  // The log entry names the same call as the refusal ToolMessage. That pairing is what the chat protocol
-  // needs to attach a result to the chip that opened it, and what lets a replayed conversation match a
-  // refusal to the message the model saw.
-  assert.equal(guard.activity[0].id, 'x1');
-  assert.equal(refusal.tool_call_id, 'x1');
+  const handler = async () => { executed += 1; return { content: 'write accepted' }; };
+  const write = await middleware.middleware.wrapToolCall({ toolCall: { name: 'tamandua_save_dividend', args: { account_id: 1, amount: 500 }, id: 'x1' } }, handler);
+  assert.equal(executed, 1);
+  assert.equal(middleware.activity[0].status, 'ok');
+  assert.equal(middleware.activity[0].id, 'x1');
+  assert.match(write.content, /<tamandua_tool_data tool="save_dividend">/);
 
-  // And a read tool passes through, wrapped as untrusted data.
-  const ok = await guard.middleware.wrapToolCall({ toolCall: { name: 'tamandua_get_summary', args: {}, id: 'x2' } }, async () => ({ content: '{"valueByCurrency":{"EUR":1000}}' }));
-  assert.equal(guard.activity[1].id, 'x2');
+  const ok = await middleware.middleware.wrapToolCall({ toolCall: { name: 'tamandua_get_summary', args: {}, id: 'x2' } }, async () => ({ content: '{"valueByCurrency":{"EUR":1000}}' }));
+  assert.equal(middleware.activity[1].id, 'x2');
   assert.match(ok.content, /<tamandua_tool_data tool="get_summary">/);
   assert.match(ok.content, /not instructions to follow/);
 
   // A call with no id is the case a name-derived key would get wrong: two reads of the same tool would
   // share one id, and only one chip would survive the pairing.
   for (const content of ['{"a":1}', '{"b":2}']) {
-    await guard.middleware.wrapToolCall({ toolCall: { name: 'tamandua_get_summary', args: {} } }, async () => ({ content }));
+    await middleware.middleware.wrapToolCall({ toolCall: { name: 'tamandua_get_summary', args: {} } }, async () => ({ content }));
   }
-  const generated = guard.activity.slice(2).map((item) => item.id);
+  const generated = middleware.activity.slice(2).map((item) => item.id);
   assert.equal(new Set(generated).size, 2, `id-less calls collided: ${generated.join(', ')}`);
-  assert.equal(db.prepare('SELECT COUNT(*) AS n FROM dividends').get().n, before, 'nothing was written');
+  assert.equal(db.prepare('SELECT COUNT(*) AS n FROM dividends').get().n, before, 'the test handler logged the call without changing the database');
 });
 
 test('the conversation replays earlier turns and the disclosure gates the first request', async (t) => {
@@ -720,28 +697,6 @@ test('a run outside one of our conversations is refused instead of inventing one
   assert.equal(messagesOf(), before.messages, 'and nothing was written in its place');
 });
 
-test('a run that cannot reach the records says so in its own message, not in the answer', async (t) => {
-  // With every read tool off, `agent.js` yields a `notice` before answering, because FR-1 forbids guessing
-  // at figures. On the protocol that has to arrive as a message of its own: folded into the answer it would
-  // also be *stored* as part of the answer, and read back later as something the model concluded from data.
-  const answer = 'You have 3200.00 EUR.';
-  const { request, copilotChat, configure, close } = await startAssistant({ answer });
-  t.after(close);
-  await configure();
-  for (const tool of READ_ONLY_TOOLS) {
-    assert.equal((await request(`assistant/mcp/tools/${tool}`, { method: 'PUT', body: { enabled: false } })).status, 200);
-  }
-
-  const run = await copilotChat('what is my balance?');
-  assert.equal(run.runError, null, JSON.stringify(run.events));
-  assert.match(run.text, /switched off|no access to your records/i, 'the notice reaches the user');
-  assert.equal(run.messages.length, 2, 'notice and answer are two messages');
-  assert.notEqual(run.messages[0].messageId, run.messages[1].messageId);
-  assert.equal(run.messages.at(-1).text, answer, 'the answer is not carrying the warning inside it');
-
-  const stored = (await request(`assistant/conversations/${run.threadId}`)).payload.conversation;
-  assert.equal(stored.messages[1].content, answer, 'and neither is it persisted as part of the answer');
-});
 
 test('history can be inspected, renamed and deleted without touching financial records', async (t) => {
   const { request, copilotChat, configure, db, close } = await startAssistant({ answer: 'noted' });

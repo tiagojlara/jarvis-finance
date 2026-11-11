@@ -1,4 +1,4 @@
-// Endpoint URL policy for the model connection (docs/agent-product-requirements.md 6.2.1).
+// Endpoint URL policy for the model connection.
 // Plain HTTP is fine for a local inference server on this machine and blocked everywhere else
 // unless the user turns the insecure-HTTP override on, because a token over plain HTTP to a
 // remote host is a token anyone on the path can read.

@@ -10,7 +10,7 @@
 // an ephemeral port only knows the number after createApp has run.
 
 const { MultiServerMCPClient } = require('@langchain/mcp-adapters');
-const { isReadOnlyTool, bareToolName } = require('./readOnlyGuard');
+const { bareToolName } = require('./toolMiddleware');
 
 const SERVER_KEY = 'tamandua';
 
@@ -20,8 +20,7 @@ function defaultMcpUrl() {
   return `http://127.0.0.1:${port}/mcp`;
 }
 
-// `store` supplies the user's per-tool switches and the master enable (§6.2 "enable or
-// disable the built-in connection and individual tools").
+// `store` supplies the master connection switch.
 function createMcpConnection({ url, store } = {}) {
   const resolveUrl = () => (typeof url === 'function' ? url() : url) || defaultMcpUrl();
   let client = null;
@@ -63,22 +62,20 @@ function createMcpConnection({ url, store } = {}) {
     return pending;
   }
 
-  // Tools the agent may actually be given: read-only, not switched off, connection enabled.
-  // Filtering happens here rather than only in the guard so the model is never even told a
-  // disabled tool exists.
+  // Every tool published by the local MCP server is available to the internal agent.
   async function activeTools() {
-    const state = store?.toolState?.() || { disabled: new Set(), enabled: true };
-    if (!state.enabled) return [];
+    const enabled = store?.read?.('mcp.enabled') !== 'false';
+    if (!enabled) return [];
     const loaded = await connect();
-    return loaded.filter((tool) => isReadOnlyTool(tool.name) && !state.disabled.has(bareToolName(tool.name)));
+    return loaded;
   }
 
   async function status() {
     const endpoint = resolveUrl();
-    const state = store?.toolState?.() || { disabled: new Set(), enabled: true };
+    const enabled = store?.read?.('mcp.enabled') !== 'false';
     let loaded = null;
     let error = lastError;
-    if (state.enabled) {
+    if (enabled) {
       try {
         loaded = await connect();
       } catch (connectError) {
@@ -88,18 +85,15 @@ function createMcpConnection({ url, store } = {}) {
     const inventory = (loaded || []).map((tool) => ({
       name: bareToolName(tool.name),
       description: tool.description || '',
-      readOnly: isReadOnlyTool(tool.name),
-      enabled: !state.disabled.has(bareToolName(tool.name)),
-      annotations: tool.metadata?.annotations || null,
     })).sort((a, b) => a.name.localeCompare(b.name));
     return {
       url: endpoint,
-      enabled: state.enabled,
+      enabled,
       connected: Boolean(loaded),
       checkedAt,
-      error: state.enabled ? error : 'The built-in Tamanduá connection is turned off.',
+      error: enabled ? error : 'The built-in Tamanduá connection is turned off.',
       tools: inventory,
-      exposed: inventory.filter((tool) => tool.readOnly && tool.enabled).length,
+      exposed: inventory.length,
     };
   }
 

@@ -1,8 +1,8 @@
 // Translates the assistant's own event stream into AG-UI events.
 //
 // This is the whole CopilotKit integration on the server side: `assistant.run()` stays the brain —
-// read-only guard, MCP connection, token handling, SQLite history (docs/agent-product-requirements.md
-// FR-3, FR-8, FR-10, §9) — and everything the chat protocol needs is derived here from what it already
+// tool activity tracking, MCP connection, token handling, SQLite history — and everything the chat
+// protocol needs is derived here from what it already
 // yields. Nothing in this file opens a socket, reads a database or knows about Express, which is what
 // makes it testable by feeding it a scripted list of events.
 //
@@ -59,8 +59,7 @@ function* toolCallEvents(activity, fallbackId) {
   yield { type: EventType.TOOL_CALL_RESULT, messageId: `${toolCallId}-result`, toolCallId, role: 'tool', content: toolResultContent(activity) };
 }
 
-// A standalone line the assistant says *about* the run rather than as its answer — a read-only refusal,
-// no tools enabled. Its own message id, so it never merges into the answer text or into history.
+// A standalone line the assistant says *about* the run rather than as its answer.
 function* noticeEvents(message, id) {
   yield { type: EventType.TEXT_MESSAGE_START, messageId: id, role: 'assistant' };
   yield { type: EventType.TEXT_MESSAGE_CONTENT, messageId: id, delta: String(message) };
@@ -159,7 +158,6 @@ async function* toAguiEvents({ source, threadId, runId }) {
               messageId: event.messageId ?? null,
               conversationId: event.conversationId ?? null,
               model: event.model ?? null,
-              refusals: event.refusals ?? [],
               aborted: Boolean(event.aborted),
             },
           };

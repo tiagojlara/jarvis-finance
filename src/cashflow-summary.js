@@ -1,7 +1,7 @@
 // Cash-flow aggregation for one calendar month, shared by three callers:
 // the MCP `get_cash_flow_summary` tool, the REST cash-flow endpoints, and the assistant's
 // cached summaries. Extracted so the assistant cannot grow a second, weaker aggregation
-// (see docs/agent-product-requirements.md FR-6: reuse existing validation and semantics).
+// and all callers use the same validation and semantics.
 // Totals stay per currency and are never converted here.
 
 const round = (value) => Math.round(value * 100) / 100;
