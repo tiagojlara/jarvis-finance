@@ -3,8 +3,8 @@
 // This table is separate from the finance `settings` table on purpose: the browser loads
 // /api/settings on every start and /api/backup dumps it, so anything stored there is by
 // definition client-visible and backup-carried. The model token must be neither
-// (docs/agent-product-requirements.md 6.2.1 and FR: "the dedicated encrypted settings record
-// is the only database location for the token"). The token gets its own row, encrypted,
+// so the dedicated encrypted settings record is the only database location for the token.
+// The token gets its own row, encrypted,
 // and nothing here ever returns it — Settings shows whether one is saved, not what it is.
 
 const { encryptSecret, decryptSecret, describeKeySource } = require('./secrets');
@@ -17,7 +17,6 @@ const KEYS = {
   token: 'model.token',
   tokenSavedAt: 'model.token_saved_at',
   allowInsecure: 'model.allow_insecure_http',
-  disabledTools: 'mcp.disabled_tools',
   serverEnabled: 'mcp.enabled',
   disclosureAcknowledgedAt: 'disclosure.acknowledged_at',
 };
@@ -81,7 +80,6 @@ function createAssistantStore(db, { keyOptions = {} } = {}) {
     return {
       ...settings,
       keySource: await keySource(),
-      disabledTools: readJson(KEYS.disabledTools, []),
       mcpEnabled: readJson(KEYS.serverEnabled, true) !== false,
       disclosureAcknowledgedAt: read(KEYS.disclosureAcknowledgedAt) || null,
     };
@@ -136,25 +134,12 @@ function createAssistantStore(db, { keyOptions = {} } = {}) {
     return { acknowledgedAt: stamp };
   }
 
-  function toolState() {
-    const disabled = new Set(readJson(KEYS.disabledTools, []));
-    return { disabled, enabled: readJson(KEYS.serverEnabled, true) !== false };
-  }
-
-  function setToolEnabled(name, enabled) {
-    const { disabled } = toolState();
-    if (enabled) disabled.delete(name);
-    else disabled.add(name);
-    write(KEYS.disabledTools, JSON.stringify([...disabled].sort()));
-    return toolState();
-  }
-
   function setMcpEnabled(enabled) {
     write(KEYS.serverEnabled, JSON.stringify(enabled === true));
-    return toolState();
+    return { enabled: enabled === true };
   }
 
-  return { rawModelSettings, publicSettings, saveModelSettings, modelConfig, acknowledgement, acknowledgeDisclosure, toolState, setToolEnabled, setMcpEnabled, KEYS, read };
+  return { rawModelSettings, publicSettings, saveModelSettings, modelConfig, acknowledgement, acknowledgeDisclosure, setMcpEnabled, KEYS, read };
 }
 
 module.exports = { createAssistantStore, KEYS };

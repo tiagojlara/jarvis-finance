@@ -1,13 +1,12 @@
-// Assistant entry point. Kept separate from the UI and from the portfolio routes on purpose
-// (docs/agent-product-requirements.md §13: "Keep model-provider and MCP-client adapters
-// separate from UI components"), so the provider can be swapped without touching views and
+// Assistant entry point. Kept separate from the UI and from the portfolio routes on purpose,
+// so the provider can be swapped without touching views and
 // the views hold no provider logic.
 
 const { createAssistantRouter, DISCLOSURE } = require('./routes');
 const { createAssistantStore } = require('./store');
 const { createHistory } = require('./history');
 const { createMcpConnection, defaultMcpUrl } = require('./mcpConnection');
-const { createReadOnlyGuard, READ_ONLY_TOOLS } = require('./readOnlyGuard');
+const { createToolMiddleware } = require('./toolMiddleware');
 const { createSummaries } = require('./summaries');
 const { normalizeEndpointUrl } = require('./endpoints');
 const { AssistantInputError } = require('./errors');
@@ -27,12 +26,11 @@ module.exports = {
   createAssistantStore,
   createHistory,
   createMcpConnection,
-  createReadOnlyGuard,
+  createToolMiddleware,
   createSummaries,
   normalizeEndpointUrl, AssistantInputError,
   defaultMcpUrl,
   DISCLOSURE,
-  READ_ONLY_TOOLS,
   secrets,
   model,
   prompts,

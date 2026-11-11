@@ -7,7 +7,6 @@
 
 const express = require('express');
 const { createAssistantStore } = require('./store');
-const { READ_ONLY_TOOLS } = require('./readOnlyGuard');
 const { createMcpConnection } = require('./mcpConnection');
 const { createHistory } = require('./history');
 const { createSummaries } = require('./summaries');
@@ -28,7 +27,7 @@ const DISCLOSURE = {
     'To answer a question or write a summary, the app sends to the model endpoint you configured: your question, the earlier messages of that conversation, and the records the model reads back from the local Tamanduá tools (account, asset, transaction, price and cash-flow figures). Model endpoints are usually remote, so those figures leave this machine when you ask a question.',
     'The app does not send your records to any other service, and it never sends the API token anywhere except the endpoint you configured.',
     'Chat history, settings and summaries are stored in this app\'s database only, and you can delete them at any time. Deleting a conversation does not delete any financial record.',
-    'The assistant is read-only: it cannot add, change or remove anything. It is not financial or tax advice.',
+    'The assistant can use all tools published by the local MCP server, including tools that add, change or remove records. It is not financial or tax advice.',
   ],
 };
 
@@ -114,17 +113,6 @@ function createAssistantRouter({ db, dataDir, mcpUrl, keyOptions = {} } = {}) {
     store.setMcpEnabled((req.body || {}).enabled === true);
     res.json(await connection.status());
   }));
-
-  // Per-tool switches. A tool outside the read-only allowlist cannot be enabled at all —
-  // this surface only ever narrows what the assistant is given.
-  router.put('/api/assistant/mcp/tools/:name', (req, res) => {
-    const name = req.params.name.startsWith('tamandua_') ? req.params.name.slice('tamandua_'.length) : req.params.name;
-    if (!READ_ONLY_TOOLS.includes(name)) {
-      return res.status(400).json({ error: `"${name}" is not a read-only Tamanduá tool, so the assistant cannot expose it. Phase one reads records only.` });
-    }
-    store.setToolEnabled(name, (req.body || {}).enabled === true);
-    res.json({ ok: true, disabledTools: [...store.toolState().disabled] });
-  });
 
   // ---- history (§10 item 4, FR-10) --------------------------------------------------
   router.get('/api/assistant/conversations', (req, res) => {

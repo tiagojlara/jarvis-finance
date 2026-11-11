@@ -1,8 +1,8 @@
 // Encryption for the model endpoint token at rest.
 //
 // The database row holds only ciphertext; the key lives outside it, in one of three places,
-// tried in this order (docs/agent-product-requirements.md 6.2.1: OS credential store
-// preferred, a documented local provisioning method if not, and never the key beside the
+// tried in this order (OS credential store preferred, a local provisioning method if not,
+// and never the key beside the
 // ciphertext):
 //
 //   env      — the configured assistant key, for headless machines, CI, or a chosen secret manager.

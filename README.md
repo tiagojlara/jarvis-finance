@@ -14,7 +14,7 @@ Track investments, cash flow, net worth, and retirement scenarios in one place. 
 - **Understand your cash flow:** record income and spending by account and category, with totals kept in each account's currency.
 - **See your net worth:** combine investments and cash with manually valued property, vehicles, and loans.
 - **Explore retirement scenarios:** adjust contributions, returns, and inflation assumptions to see illustrative projections.
-- **Ask questions about your records:** optionally connect a compatible model endpoint to get read-only explanations and summaries.
+- **Ask questions and manage records:** optionally connect a compatible model endpoint to use the full local MCP toolset, including record changes.
 - **Work across currencies:** use EUR, SEK, USD, and BRL, with optional historical exchange rates from Frankfurter.
 
 ## Privacy by default
@@ -49,4 +49,4 @@ Tamanduá includes a local MCP endpoint at `http://127.0.0.1:3000/mcp` for compa
 
 Tamanduá is for personal tracking and scenario exploration, not investment, tax, or financial advice. Prices and asset valuations are manual snapshots; exchange rates are historical reference rates, not live trading quotes. Projections are illustrative and exclude taxes, costs, and market variability. Brokerage connections, bank syncing, and automatic price feeds are not included.
 
-For technical details about the local API, assistant behavior, data model, and MCP tools, see the source code and `docs/agent-product-requirements.md`.
+For technical details about the local API, assistant behavior, data model, and MCP tools, see the corresponding source files in `src/`.

@@ -11,15 +11,10 @@ function StatusLine({ ok, children }) {
   return <p className={`assistant-result ${ok ? 'assistant-result-ok' : 'assistant-result-bad'}`} role="status">{children}</p>;
 }
 
-// The switch means "offered to the assistant". A write tool is never offered in phase one, so it
-// is shown as off and unchangeable rather than as an enabled row — the inventory stays visible,
-// the capability does not exist.
-function ToolSwitch({ tool, disabled, onToggle }) {
-  return <label className={`assistant-tool ${tool.readOnly ? '' : 'assistant-tool-blocked'}`}>
-    <input type="checkbox" checked={tool.readOnly && tool.enabled} disabled={!tool.readOnly || disabled}
-      onChange={(event) => onToggle(tool, event.target.checked)}/>
-    <span className="assistant-tool-name"><code>{tool.name}</code>{tool.readOnly ? null : <span className="tag tag-warn">write · never offered</span>}<span className="assistant-tool-desc">{tool.description}</span></span>
-  </label>;
+function ToolRow({ tool }) {
+  return <div className="assistant-tool">
+    <span className="assistant-tool-name"><code>{tool.name}</code><span className="assistant-tool-desc">{tool.description}</span></span>
+  </div>;
 }
 
 export default function AssistantSettings() {
@@ -124,15 +119,6 @@ export default function AssistantSettings() {
     finally { setBusy(''); }
   };
 
-  const toggleTool = async (tool, enabled) => {
-    setBusy(`tool-${tool.name}`); setError('');
-    try {
-      await assistantApi(`mcp/tools/${encodeURIComponent(tool.name)}`, { method: 'PUT', body: JSON.stringify({ enabled }) });
-      setMcp(await assistantApi('mcp'));
-    } catch (e) { setError(e.message); }
-    finally { setBusy(''); }
-  };
-
   const wipeHistory = async () => {
     if (!window.confirm('Delete every conversation and message? Financial records are not touched.')) return;
     setBusy('wipe'); setError('');
@@ -156,7 +142,7 @@ export default function AssistantSettings() {
   return <section className="panel assistant-settings">
     <div className="panel-heading"><h2>Model endpoint and assistant</h2><span className={`assistant-status ${settings?.ready ? 'assistant-ready' : 'assistant-blocked'}`}>{settings?.ready ? '● Configured' : '○ Not configured'}</span></div>
 
-    <p className="panel-note">The assistant is <b>read-only</b>: it answers from the records this app already keeps, through the app&apos;s own local MCP connection, and cannot add, change or remove anything. Requests to your model endpoint go through this local server, so the token never reaches browser code, and chat history is never part of a backup file.</p>
+    <p className="panel-note">The assistant can use all tools published by the app&apos;s local MCP connection, including tools that add, change or remove records. Requests to your model endpoint go through this local server, so the token never reaches browser code, and chat history is never part of a backup file.</p>
 
     <div className="form-grid">
       <label className="field"><span>OpenAI-compatible base URL</span>
@@ -191,13 +177,13 @@ export default function AssistantSettings() {
     <h3 className="subheading">Local Tamanduá connection</h3>
     <p className="panel-note">The app connects to its own <code>{mcp?.url || '/mcp'}</code> endpoint as an MCP client. This is separate from exposing <code>/mcp</code> to external agents: those keep the descriptions and safety semantics the server publishes.{mcp?.checkedAt ? ` Checked ${stamp(mcp.checkedAt)}.` : ''}</p>
     <div className="assistant-mcp-status">
-      <span className={`tag ${mcp?.connected ? '' : 'tag-warn'}`}>{mcp?.enabled ? (mcp?.connected ? `● Connected · ${mcp.exposed} read tool${mcp.exposed === 1 ? '' : 's'} offered` : '○ Not connected') : '○ Turned off'}</span>
+      <span className={`tag ${mcp?.connected ? '' : 'tag-warn'}`}>{mcp?.enabled ? (mcp?.connected ? `● Connected · ${mcp.exposed} tool${mcp.exposed === 1 ? '' : 's'} available` : '○ Not connected') : '○ Turned off'}</span>
       <button type="button" className="button button-quiet" onClick={reconnect} disabled={Boolean(busy)}>{busy === 'reconnect' ? 'Reconnecting…' : 'Reconnect'}</button>
-      <label className="assistant-check"><input type="checkbox" checked={Boolean(mcp?.enabled)} disabled={Boolean(busy)} onChange={(e) => setMcpEnabled(e.target.checked)}/><span>Let the assistant read Tamanduá records</span></label>
+      <label className="assistant-check"><input type="checkbox" checked={Boolean(mcp?.enabled)} disabled={Boolean(busy)} onChange={(e) => setMcpEnabled(e.target.checked)}/><span>Let the assistant use Tamanduá tools</span></label>
     </div>
     {mcp?.error && <p className="form-error">{mcp.error}</p>}
     <div className="assistant-tool-list">
-      {(mcp?.tools || []).map((tool) => <ToolSwitch key={tool.name} tool={tool} disabled={Boolean(busy) || !mcp?.enabled} onToggle={toggleTool}/>)}
+      {(mcp?.tools || []).map((tool) => <ToolRow key={tool.name} tool={tool}/>)}
       {!mcp?.tools?.length && <p className="panel-note">No tools listed — the connection is off or unreachable, so reconnect to load the inventory.</p>}
     </div>
 
