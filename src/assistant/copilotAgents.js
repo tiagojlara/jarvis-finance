@@ -16,6 +16,7 @@ const { toAguiEvents, runErrorEvent } = require('./aguiBridge');
 // assistant's own rules, and the shared table is what keeps those names identical to the ones `agent.js`
 // puts on its failures.
 const { ERROR_CODES } = require('./errors');
+const { EventType } = require('@ag-ui/core');
 
 // A conversation id, or null. `threadId === String(conversation.id)` is the whole identity scheme, so a
 // thread that is not one of ours is not a conversation the assistant may write into — and the agent's own
@@ -108,6 +109,25 @@ function createJarvisAgent({ assistant, history, store }) {
   });
 }
 
+function createSummaryAgent({ summaries }) {
+  return new BuiltInAgent({ type: 'custom', factory: async function* (ctx) {
+    const { placement, period, system } = ctx.input.forwardedProps || {};
+    if (!['overview', 'cashflow'].includes(placement)) throw new Error('Unknown summary placement.');
+    const userText = latestUserTurn(ctx.input.messages);
+    let text;
+    try {
+      text = await summaries.completeSummary({ system, userText, placement, period, signal: ctx.abortSignal });
+    } catch (error) {
+      yield runErrorEvent({ code: ERROR_CODES.runFailed, message: error?.message || 'The summary could not be generated.' });
+      return;
+    }
+    const messageId = `summary-${ctx.input.runId}`;
+    yield { type: EventType.TEXT_MESSAGE_START, messageId, role: 'assistant' };
+    yield { type: EventType.TEXT_MESSAGE_CONTENT, messageId, delta: String(text) };
+    yield { type: EventType.TEXT_MESSAGE_END, messageId };
+  } });
+}
+
 // The agents whose runs can put finance records on the wire. `summary` is listed before it exists (§F):
 // a gate that has to be widened when a second record-reading agent is registered is a gate that will be
 // forgotten. `echo` is deliberately absent — it reads nothing and is the transport's own stand-in.
@@ -162,4 +182,4 @@ function createPolicyHooks({ store, disclosure, agents = RECORD_AGENTS } = {}) {
   };
 }
 
-module.exports = { createJarvisAgent, createPolicyHooks, runJarvis, latestUserTurn, contentToText, conversationIdFrom, RECORD_AGENTS };
+module.exports = { createJarvisAgent, createSummaryAgent, createPolicyHooks, runJarvis, latestUserTurn, contentToText, conversationIdFrom, RECORD_AGENTS };

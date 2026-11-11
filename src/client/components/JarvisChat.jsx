@@ -25,7 +25,7 @@ const AGENT_ID = 'jarvis';
 const LABELS = {
   chatInputPlaceholder: 'Ask about your records — Enter sends, Shift+Enter adds a line',
   welcomeMessageText: 'Read-only answers, from your own records. Jarvis looks them up through this app’s local tools and quotes what it finds, per currency.',
-  chatDisclaimerText: 'Sends your question, this conversation, and the records the tools read to the endpoint in Settings. Nothing else.',
+  chatDisclaimerText: '',
 };
 
 const STATUS_LABELS = { ok: 'read', error: 'failed', refused: 'refused' };
@@ -152,7 +152,7 @@ function JarvisPanel() {
   const ready = Boolean(settings?.ready);
   const body = <>
     {!expanded && <div className="jarvis-panel-head">
-      <b>Ask Jarvis</b>
+      <div className="jarvis-panel-title"><b>Ask Jarvis</b><span>Portfolio answers grounded in your records</span></div>
       <span className="jarvis-panel-actions">
         <button type="button" className="table-action" onClick={() => jarvis.startNewChat()}>New chat</button>
         <button type="button" className="icon-button" onClick={jarvis.closePanel} aria-label="Close Ask Jarvis">×</button>

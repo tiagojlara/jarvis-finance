@@ -27,7 +27,7 @@ const SECRET_PATTERNS = [
 
 // Turns provider/network errors into something the user can act on (FR-9), and strips any
 // credential the provider put in its own message.
-function sanitizeError(error, { token, model, baseUrl } = {}) {
+function sanitizeError(error, { token, model, baseUrl, timeoutMs } = {}) {
   const raw = [error?.message, error?.cause?.message].filter(Boolean).join(' ');
   let text = raw.replace(/\s+/g, ' ').trim();
   if (token && text.includes(token)) text = text.split(token).join('[redacted]');
@@ -42,7 +42,7 @@ function sanitizeError(error, { token, model, baseUrl } = {}) {
 
   if (/ECONNREFUSED/i.test(raw)) return `Nothing is listening at ${host}. Start the model server, or fix the base URL in Settings & backup → Model endpoint.`;
   if (/ENOTFOUND|EAI_AGAIN/i.test(raw)) return `The host in ${host} could not be resolved. Check the endpoint URL and your network.`;
-  if (/ETIMEDOUT|timed out|timeout|abort/i.test(raw)) return `The endpoint did not answer within ${Math.round((error?.timeoutMs || CHAT_TIMEOUT_MS) / 1000)}s. A local model that is still loading can cause this — try again, or raise the timeout by starting the app with JARVIS_ASSISTANT_TIMEOUT_MS.`;
+  if (/ETIMEDOUT|timed out|timeout|abort/i.test(raw)) return `The endpoint did not answer within ${Math.round((error?.timeoutMs || timeoutMs || CHAT_TIMEOUT_MS) / 1000)}s. A local model that is still loading can cause this — try again, or raise the timeout by starting the app with JARVIS_ASSISTANT_TIMEOUT_MS.`;
   if (status === 401 || status === 403) return `The endpoint rejected the token (${status}). Re-enter the API token in Settings & backup → Model endpoint; some local servers expect a placeholder value here rather than a real key.`;
   if (status === 404) return `The endpoint has no model "${named}" at this path (404). Check the model identifier, and make sure the base URL points at the API root, for example https://host/v1.`;
   if (status === 429) return 'The endpoint is rate limited (429). Wait a moment and try again.';
@@ -53,7 +53,7 @@ function sanitizeError(error, { token, model, baseUrl } = {}) {
 
 // Builds a client from the saved settings. Throws an actionable Error when the assistant is
 // not configured yet, so callers never see an undefined key path.
-async function createChatModel(store, { streaming = false, maxRetries = 1, timeoutMs = CHAT_TIMEOUT_MS } = {}) {
+async function createChatModel(store, { streaming = false, maxRetries = 1, timeoutMs = CHAT_TIMEOUT_MS, maxTokens } = {}) {
   const { baseUrl, model, token } = await store.modelConfig();
   const client = new ChatOpenAI({
     model,
@@ -62,6 +62,7 @@ async function createChatModel(store, { streaming = false, maxRetries = 1, timeo
     maxRetries,
     timeout: timeoutMs,
     streaming,
+    ...(maxTokens ? { maxTokens } : {}),
   });
   return { client, baseUrl, model, token };
 }

@@ -134,6 +134,14 @@ Summary content must not hide the underlying tables or charts, and must not be u
 - **FR-10 History controls:** Users can inspect and delete locally persisted conversation history. Phase two adds upload deletion controls; deleting a conversation or source file does not silently delete committed financial records.
 - **FR-11 Accessibility and responsive layout:** Chat, attachment review, summaries, and confirmations work on narrow screens and with keyboard/screen-reader navigation.
 
+### Phase-one traceability
+
+- **FR-8:** CopilotKit tool chips show live reads and restored tool activity; summary runs use a separate non-numeric runtime thread and do not create chat history rows.
+- **FR-10:** Conversations and messages remain in the dedicated assistant tables; summaries are cached separately and are not transcript entries.
+- **FR-11:** The launcher clears the 61px mobile navigation bar, the chat panel is viewport-bounded, and the disclosure dialog receives keyboard focus. Browser verification is still required for release.
+
+The measured production bundle is 258.05 kB gzip for the lazy CopilotKit chat/runtime chunk and 95.71 kB gzip for the app entry. CopilotKit telemetry is disabled by default with `COPILOTKIT_TELEMETRY_DISABLED=1` and `DO_NOT_TRACK=1`.
+
 ### Quality requirements
 
 - Keep the current local-only deployment behavior as the default. Do not bind the server to a public interface as a side effect of adding chat.

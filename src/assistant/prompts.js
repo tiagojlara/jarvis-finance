@@ -38,6 +38,7 @@ function chatSystemPrompt({ today, toolNames = [] } = {}) {
     '- Answer in the language the user writes in. Be direct and concrete; two short paragraphs beat one long one.',
     '- Use "- " bullets for lists of records and keep any table small. No tables for single-currency answers.',
     '- Money: keep the currency symbol or code the data uses, and do not silently round (2 decimals for SEK, as stored).',
+    '- When a question compares at least three dated values or categories, add a compact Mermaid `xychart-beta` chart using only values returned by tools. Keep each currency in a separate chart, label the axis with its currency, and limit each chart to eight points. If the data cannot be charted without guessing, answer in text.',
     '- When a tool fails or returns an error, quote the part that tells the user what to do next.',
     '',
     toolNames.length ? `Available read-only tools: ${toolNames.join(', ')}.` : 'No tools are currently reachable, so you cannot state any figure from the records. Say the local Jarvis connection needs to be reconnected in Settings & backup → Assistant, and answer only questions that need no data.',

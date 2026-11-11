@@ -190,7 +190,7 @@ function createAssistantRouter({ db, dataDir, mcpUrl, keyOptions = {} } = {}) {
     try {
       res.json(await summaries.generate(String(placement || ''), period ? String(period) : ''));
     } catch (error) {
-      res.status(502).json({ error: error?.message || 'The summary could not be generated.' });
+      res.status(error?.status || 502).json({ error: error?.message || 'The summary could not be generated.', ...(error?.code ? { code: error.code } : {}) });
     }
   }));
 

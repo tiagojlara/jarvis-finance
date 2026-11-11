@@ -191,8 +191,16 @@ button.flow-category-row:hover{background:#f7f8f6}
 .jarvis-floating{position:fixed;z-index:28;right:24px;bottom:24px;width:min(430px,calc(100vw - 32px));height:min(660px,calc(100vh - 48px))}
 .jarvis-floating:focus{outline:none}
 .jarvis-panel-head{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:12px 14px;border-bottom:1px solid var(--line);font-size:12px;letter-spacing:-.12px}
+.jarvis-panel-title{display:grid;gap:3px}.jarvis-panel-title span{color:#87958c;font-size:9px;font-weight:450;letter-spacing:0}
 .jarvis-panel-actions{display:flex;align-items:center;gap:4px}
 .jarvis-chat{display:flex;flex:1;flex-direction:column;min-height:0}
+/* Keep CopilotKit's transcript proportional to the compact floating panel. */
+.jarvis-chat [data-copilotkit]{font-family:Inter,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;font-size:14px;line-height:1.55}
+.jarvis-chat svg{max-width:100%;height:auto}
+.jarvis-chat pre{max-width:100%;overflow-x:auto;font-size:12px;line-height:1.45}
+.jarvis-chat :is(p,li){font-size:14px;line-height:1.55}
+.jarvis-chat .mermaid,.jarvis-chat [class*="mermaid"]{width:100%;max-width:100%;overflow-x:auto}
+.jarvis-chat .mermaid svg,.jarvis-chat [class*="mermaid"] svg{display:block;width:100%;min-width:0;height:auto;max-height:300px;font-family:Inter,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}
 .jarvis-gate{margin:0;padding:11px 13px;border-bottom:1px solid var(--line);background:#fff6f2;color:#8b4a35;font-size:10px;line-height:1.55}
 /* On /assistant the same panel is placed by the page, so it stops being a floating card. */
 .jarvis-inpage{flex:1;min-height:0;border:0;border-radius:0;background:transparent;box-shadow:none}

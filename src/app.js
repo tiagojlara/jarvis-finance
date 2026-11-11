@@ -5,7 +5,7 @@ const { createPortfolioRouter } = require('./routes/portfolio');
 const { createMcpRouter } = require('./mcp/server');
 const { createAssistantModule, DISCLOSURE } = require('./assistant');
 const { createCopilotModule } = require('./assistant/copilotRuntime');
-const { createJarvisAgent, createPolicyHooks } = require('./assistant/copilotAgents');
+const { createJarvisAgent, createSummaryAgent, createPolicyHooks } = require('./assistant/copilotAgents');
 
 // App factory: pass a dataDir (and, in tests, fetch overrides). No listening here — server.js owns that.
 function createApp(options = {}) {
@@ -53,7 +53,15 @@ function createApp(options = {}) {
     hooks: createPolicyHooks({ store: assistant.store, disclosure: DISCLOSURE }),
     extraAgents: async () => ({
       jarvis: createJarvisAgent({ assistant: assistant.assistant, history: assistant.history, store: assistant.store }),
+      summary: createSummaryAgent({ summaries: assistant.summaries }),
     }),
+  });
+  assistant.summaries.setComplete(async ({ system, userText, placement, period, signal }) => {
+    const result = await copilot.runLocal({
+      agentId: 'summary', threadId: `summary-${placement}-${period || 'all'}`,
+      message: userText, forwardedProps: { placement, period, system }, signal,
+    });
+    return result.text;
   });
   app.use(copilot.router);
 

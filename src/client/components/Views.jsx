@@ -217,8 +217,6 @@ export function CashFlow({ data, onAdd, onDelete, onEdit, navigate, revision = 0
       ]; }).flat()}
       {!currenciesInUse.length && <Metric label="RECORDED CASH FLOW" value="—" detail={`Nothing recorded for ${periodLabel} yet. Income and spending you add show up here.`}/>}
     </div>
-    // The card owns the period label, so the month reads the same way in its heading and in the
-    // sentence the model writes about it.
     <SummaryCard placement="cashflow" period={month} title="Jarvis summary · cash flow" navigate={navigate} revision={revision}/>
     <div className="content-grid content-grid-main">
       <Section title={`Spending by category · ${periodLabel}`} className="cashflow-breakdown" action={categoryFilter ? <button type="button" className="text-action" onClick={() => setCategoryFilter('')}>Clear filter</button> : undefined}>
