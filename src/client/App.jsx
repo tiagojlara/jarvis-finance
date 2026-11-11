@@ -3,10 +3,12 @@ import { api, currencies, escapeCsv, getHomeValue } from './api.js';
 import Sidebar from './components/Sidebar.jsx';
 import Modal from './components/Modal.jsx';
 import { Activity, CashFlow, Dividends, NetWorth, Overview, Planning, Portfolio, Settings } from './components/Views.jsx';
+import Assistant from './components/Assistant.jsx';
+import { JarvisProvider } from './jarvisState.jsx';
 
 const initialSettings = { homeCurrency: 'EUR', fxProvider: 'frankfurter', currentAge: 35, retirementAge: 65, monthlyContribution: 500, monthlyIncome: 2500, oneTimeContribution: 0, monthlyWithdrawal: 0, inflation: .02, scenarios: [.03, .05, .07] };
-const titles = { overview: 'Overview', portfolio: 'Portfolio', networth: 'Net worth', activity: 'Activity', dividends: 'Dividends', cashflow: 'Cash flow', planning: 'Retirement plan', settings: 'Settings & backup' };
-const routes = ['overview', 'portfolio', 'networth', 'activity', 'dividends', 'cashflow', 'planning', 'settings'];
+const titles = { overview: 'Overview', portfolio: 'Portfolio', networth: 'Net worth', activity: 'Activity', dividends: 'Dividends', cashflow: 'Cash flow', assistant: 'Ask Jarvis', planning: 'Retirement plan', settings: 'Settings & backup' };
+const routes = ['overview', 'portfolio', 'networth', 'activity', 'dividends', 'cashflow', 'assistant', 'planning', 'settings'];
 const pathFor = (page) => (page === 'overview' ? '/' : `/${page}`);
 const pageFromLocation = () => {
   const slug = window.location.pathname.split('/')[1] || '';
@@ -17,6 +19,9 @@ const emptyData = { accounts: [], assets: [], transactions: [], prices: [], divi
 export default function App() {
   const [page, setPage] = useState(pageFromLocation); const [data, setData] = useState(emptyData); const [settings, setSettings] = useState(initialSettings);
   const [modal, setModal] = useState(null); const [editing, setEditing] = useState(null); const [busy, setBusy] = useState(true); const [error, setError] = useState('');
+  // Bumped on every reload of the records, so the AI summary cards can re-check whether their
+  // cached answer still matches the data without polling or re-asking the model.
+  const [revision, setRevision] = useState(0);
   const navigate = useCallback((next) => {
     if (!routes.includes(next)) return;
     if (window.location.pathname !== pathFor(next)) window.history.pushState({ page: next }, '', pathFor(next));
@@ -44,6 +49,7 @@ export default function App() {
       // Repair settings written by the old overview currency selector, which nested this value.
       if (saved.homeCurrency !== homeCurrency) await api('settings', { method: 'PUT', body: JSON.stringify({ homeCurrency }) });
       setError('');
+      setRevision((value) => value + 1);
     } catch (e) { setError(`Could not reach the local database: ${e.message}`); }
     finally { setBusy(false); }
   }, []);
@@ -94,21 +100,26 @@ export default function App() {
     finally { event.target.value = ''; }
   };
   const content = {
-    overview: <Overview data={data} homeValue={homeValue} settings={settings} navigate={navigate}/>,
+    overview: <Overview data={data} homeValue={homeValue} settings={settings} navigate={navigate} revision={revision}/>,
     portfolio: <Portfolio data={data} onAdd={addRecord} onDelete={deleteRecord} onEdit={editRecord}/>,
     networth: <NetWorth data={data} settings={settings} homeValue={homeValue} onAdd={addRecord} onDelete={deleteRecord} onEdit={editRecord}/>,
     activity: <Activity data={data} onAdd={addRecord} onDelete={deleteRecord}/>,
     dividends: <Dividends data={data} onAdd={addRecord} onDelete={deleteRecord} onEdit={editRecord}/>,
-    cashflow: <CashFlow data={data} onAdd={addRecord} onDelete={deleteRecord} onEdit={editRecord}/>,
+    cashflow: <CashFlow data={data} onAdd={addRecord} onDelete={deleteRecord} onEdit={editRecord} navigate={navigate} revision={revision}/>,
+    // The assistant page reads its own state from /api/assistant; `revision` only tells it that
+    // the records it answers about were reloaded, so its status line stays honest.
+    assistant: <Assistant navigate={navigate} revision={revision}/>,
     planning: <Planning settings={settings} setSettings={updateSettings} homeValue={homeValue}/>,
     settings: <Settings data={data} settings={settings} onHomeCurrency={updateSettings} onDelete={deleteRecord} onRefresh={refresh}/>,
   };
-  return <div className="app-shell min-h-screen"><Sidebar page={page} navigate={navigate}/><main className="main-content"><header className="topbar flex items-center justify-between"><div><div className="eyebrow">PERSONAL WEALTH</div><h1>{titles[page]}</h1></div><div className="topbar-actions"><label className="topbar-currency" title="Home currency for totals, charts, and planning"><span>HOME</span><select aria-label="Home currency" value={settings.homeCurrency} onChange={(event) => updateSettings({ homeCurrency: event.target.value })}>{currencies.map((c) => <option key={c}>{c}</option>)}</select></label><button className="button button-quiet desktop-button" onClick={exportCsv}>Export CSV</button><button className="button button-primary" onClick={() => addRecord('transaction')}>＋ Add activity</button></div></header>
+  // JarvisProvider wraps the whole shell, not just the assistant page: the chat icon is on every page, and
+  // the conversation it opens is the same one /assistant shows expanded.
+  return <JarvisProvider page={page} revision={revision} navigate={navigate}><div className="app-shell min-h-screen"><Sidebar page={page} navigate={navigate}/><main className="main-content"><header className="topbar flex items-center justify-between"><div><div className="eyebrow">PERSONAL WEALTH</div><h1>{titles[page]}</h1></div><div className="topbar-actions"><label className="topbar-currency" title="Home currency for totals, charts, and planning"><span>HOME</span><select aria-label="Home currency" value={settings.homeCurrency} onChange={(event) => updateSettings({ homeCurrency: event.target.value })}>{currencies.map((c) => <option key={c}>{c}</option>)}</select></label><button className="button button-quiet desktop-button" onClick={exportCsv}>Export CSV</button><button className="button button-primary" onClick={() => addRecord('transaction')}>＋ Add activity</button></div></header>
     <div className="notice"><span>✳</span> Planning tool only · Estimates are uncertain and are not financial advice.</div>
     {error && <div className="error-banner" role="status"><span>{error}</span><button onClick={() => setError('')} aria-label="Dismiss">×</button></div>}
     {busy ? <div className="loading-state">Opening your local portfolio…</div> : content[page]}
     <footer className="app-footer"><span>● Stored on this device</span><span>Manual prices are not live quotes</span><button className="mobile-export" onClick={exportCsv}>Export CSV</button></footer>
-    </main><Modal type={modal} data={data} existing={editing} onClose={() => { setModal(null); setEditing(null); }} onSave={saveRecord}/><input id="restore-file" className="hidden-input" type="file" accept="application/json" onChange={restore}/></div>;
+    </main><Modal type={modal} data={data} existing={editing} onClose={() => { setModal(null); setEditing(null); }} onSave={saveRecord}/><input id="restore-file" className="hidden-input" type="file" accept="application/json" onChange={restore}/></div></JarvisProvider>;
 }
 
 function download(blob, filename) { const url = URL.createObjectURL(blob); const link = document.createElement('a'); link.href = url; link.download = filename; link.click(); URL.revokeObjectURL(url); }

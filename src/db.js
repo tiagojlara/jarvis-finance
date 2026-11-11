@@ -56,7 +56,18 @@ CREATE TABLE IF NOT EXISTS settings(key TEXT PRIMARY KEY, value TEXT NOT NULL);
 CREATE TABLE IF NOT EXISTS cash_flow_categories(id INTEGER PRIMARY KEY, name TEXT NOT NULL, kind TEXT NOT NULL CHECK(kind IN ('income','expense')), active INTEGER NOT NULL DEFAULT 1, created_at TEXT DEFAULT CURRENT_TIMESTAMP);
 CREATE TABLE IF NOT EXISTS cash_flow_transactions(${CASH_FLOW_TX_DEF});
 CREATE UNIQUE INDEX IF NOT EXISTS idx_cash_flow_category_name ON cash_flow_categories(name,kind);
-${CASH_FLOW_TX_AUX}`;
+${CASH_FLOW_TX_AUX}
+
+-- Assistant (phase one) tables. Deliberately NOT in TABLE_FIELDS/TABLE_ORDER:
+-- that keeps them off the generic /api/:table routes and out of /api/backup, so chat
+-- history and the encrypted model token never ride along in a backup meant for sharing.
+-- assistant_settings holds the model endpoint config; the token lives in its own row,
+-- encrypted, and the key lives outside this file (see src/assistant/secrets.js).
+CREATE TABLE IF NOT EXISTS assistant_settings(key TEXT PRIMARY KEY, value TEXT NOT NULL, updated_at TEXT DEFAULT CURRENT_TIMESTAMP);
+CREATE TABLE IF NOT EXISTS assistant_conversations(id INTEGER PRIMARY KEY, title TEXT NOT NULL DEFAULT '', created_at TEXT DEFAULT CURRENT_TIMESTAMP, updated_at TEXT DEFAULT CURRENT_TIMESTAMP);
+CREATE TABLE IF NOT EXISTS assistant_messages(id INTEGER PRIMARY KEY, conversation_id INTEGER NOT NULL REFERENCES assistant_conversations(id) ON DELETE CASCADE, role TEXT NOT NULL CHECK(role IN ('user','assistant')), content TEXT NOT NULL DEFAULT '', tool_activity TEXT NOT NULL DEFAULT '[]', model TEXT NOT NULL DEFAULT '', error TEXT NOT NULL DEFAULT '', created_at TEXT DEFAULT CURRENT_TIMESTAMP);
+CREATE INDEX IF NOT EXISTS idx_assistant_messages_conversation ON assistant_messages(conversation_id, id);
+CREATE TABLE IF NOT EXISTS assistant_summaries(id INTEGER PRIMARY KEY, placement TEXT NOT NULL, period TEXT NOT NULL DEFAULT '', text TEXT NOT NULL, context TEXT NOT NULL DEFAULT '{}', fingerprint TEXT NOT NULL, model TEXT NOT NULL DEFAULT '', generated_at TEXT NOT NULL, UNIQUE(placement,period));`;
 
 // Default categories are seeded only while the table is empty, so renaming or
 // clearing defaults is respected on later starts instead of silently reverted.

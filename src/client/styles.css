@@ -122,3 +122,172 @@ button.flow-category-row:hover{background:#f7f8f6}
 .flow-category-amount small{color:#9aa49d;font-size:8px;font-weight:500}
 .flow-chart-empty{display:grid;min-height:180px;place-items:center;color:#95a098;font-size:10px}
 @media(max-width:430px){.cashflow-breakdown{padding:14px}.flow-breakdown-grid{grid-template-columns:1fr}.flow-category-chart{grid-template-columns:minmax(105px,.85fr) minmax(120px,1fr);gap:4px}.flow-category-name{font-size:9px}.flow-category-amount{font-size:8px}}
+
+/* ---- Assistant: chat page ---------------------------------------------------------------
+   Phase one of docs/agent-product-requirements.md. The chat lives inside the same panel
+   language as every other page (.panel, .metric-*, .button-*), because it is another view of
+   the same local records rather than a separate product. Colours reuse --green/--pale/--orange;
+   nothing here has its own palette. */
+.sr-only{position:absolute;width:1px;height:1px;margin:-1px;padding:0;overflow:hidden;clip:rect(0 0 0 0);clip-path:inset(50%);white-space:nowrap;border:0}
+.tag-warn{background:#fbf1e6;color:#9a6b3f}
+.tag-bad{background:#fbeee9;color:#a3503a}
+.assistant-shell{display:grid;grid-template-columns:minmax(230px,280px) minmax(0,1fr);gap:15px;align-items:start}
+.assistant-list{display:flex;flex-direction:column;gap:11px}
+.assistant-list-head{display:flex;align-items:center;justify-content:space-between;gap:10px}
+.assistant-list-head h2{margin:0;font-size:13px;font-weight:700;letter-spacing:-.12px}
+.assistant-list-head .button{min-height:32px;padding:7px 10px;font-size:10px}
+.assistant-list-foot{margin-top:auto;padding-top:11px;border-top:1px solid var(--line)}
+.assistant-conversations{display:grid;gap:3px;margin:0;padding:0;list-style:none;max-height:min(52vh,460px);overflow:auto}
+.chat-row{display:flex;align-items:center;gap:6px;border-radius:8px;transition:background .15s}
+.chat-row:hover{background:#f5f8f5}
+.chat-row.selected{background:var(--pale)}
+.chat-row-main{display:grid;gap:3px;flex:1;min-width:0;padding:9px 8px;border:0;background:transparent;text-align:left;color:var(--ink)}
+.chat-row-title{font-size:11px;font-weight:650;overflow-wrap:anywhere}
+.chat-row.selected .chat-row-title{color:#28644f}
+.chat-row-detail{color:#93a098;font-size:9px}
+.chat-row-actions{display:none;flex:0 0 auto;gap:2px;padding-right:6px}
+.chat-row:hover .chat-row-actions,.chat-row:focus-within .chat-row-actions{display:flex}
+.chat-row-editing{padding:5px}
+.chat-row-editing input{width:100%}
+.table-action{border:0;background:transparent;color:#5c7b6c;font-size:9px;font-weight:650;padding:4px 5px;border-radius:5px}
+.table-action:hover{background:#eef4ef}
+.table-remove{color:#a8624e}
+.table-remove:hover{background:#fbeee9}
+.assistant-chat{display:flex;flex-direction:column;min-height:min(72vh,680px)}
+.assistant-status{color:#93a098;font-size:9px;font-weight:650;white-space:nowrap}
+.assistant-ready{color:#378564}
+.assistant-blocked{color:#a8624e}
+.assistant-gate{display:grid;gap:10px;justify-items:start;margin-bottom:13px;padding:12px 13px;border:1px solid #f0d1c5;border-radius:8px;background:#fff6f2;color:#8b4a35;font-size:10px;line-height:1.6}
+.assistant-gate p{margin:0}
+.assistant-gate-warn{border-color:#f0dcc5;background:#fdf7ef;color:#8a6237}
+/* The old hand-rolled transcript (chat-msg/chat-log/chat-composer/tool-activity) is gone with the
+   transport it styled: the message list, the composer and the streaming line are CopilotKit's chat now.
+   What is left here is ours: the empty state, the failure line, and the tool chip our renderer draws. */
+.chat-empty{display:grid;gap:7px;margin:auto 0;padding:26px 12px;text-align:center;color:#8d9a92;font-size:11px;line-height:1.6}
+.chat-empty b{color:var(--ink);font-size:12px}
+.chat-empty span{margin:0 auto;max-width:46ch}
+.chat-error{margin:0 0 10px}
+.tool-ms{color:#9aa69f}
+.tool-args{flex:1 1 240px;min-width:0;overflow-wrap:anywhere;background:transparent;color:#8b978f}
+
+/* FR-8 — which tools ran, and that they only read. Drawn by our own tool-call renderer
+   (components/JarvisChat.jsx); registering one is required, not decorative, because 1.85.0 paints nothing
+   for a call no renderer matches. */
+.jarvis-tool{display:flex;flex-wrap:wrap;align-items:center;gap:7px;margin:3px 0;padding:6px 8px;border:1px solid var(--line);border-radius:7px;background:#f4f7f4;font-size:9px;color:#7e8b83}
+.jarvis-tool.tool-refused,.jarvis-tool.tool-error,.jarvis-tool.tool-pending{background:#fdf4f0}
+.jarvis-tool code{padding:2px 5px;border-radius:5px;background:#e8efe9;color:#3d5a4d;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:9px}
+
+/* The launcher icon and the panel it opens.
+   Stacking is a deliberate choice, not a default: the launcher sits above the sidebar (z-10) and the panel
+   just below `.modal-backdrop` (z-30), so the §9 disclosure can never be buried by the chat it exists to
+   interrupt. CopilotKit's own CopilotPopup hardcodes z-1200 on an element inside a shadow root, which no
+   stylesheet in this app can reach — that is why the floating surface is our panel around `CopilotChat`
+   rather than their popup. */
+.jarvis-launcher{position:fixed;z-index:25;right:24px;bottom:24px;display:grid;place-items:center;width:52px;height:52px;border:1px solid #cfe0d4;border-radius:50%;background:var(--green);color:#fff;font-size:20px;box-shadow:0 10px 26px #1e322e26;transition:transform .15s,background .15s}
+.jarvis-launcher:hover{background:#265c4d;transform:translateY(-1px)}
+.jarvis-launcher:focus-visible{outline:2px solid #b2cfbc;outline-offset:3px}
+.jarvis-launcher-dot{position:absolute;top:2px;right:2px;width:11px;height:11px;border:2px solid var(--surface);border-radius:50%;background:var(--orange)}
+.jarvis-panel{display:flex;flex-direction:column;min-width:0;border:1px solid var(--line);border-radius:12px;background:var(--surface);box-shadow:0 20px 60px #1e322e2a}
+.jarvis-floating{position:fixed;z-index:28;right:24px;bottom:24px;width:min(430px,calc(100vw - 32px));height:min(660px,calc(100vh - 48px))}
+.jarvis-floating:focus{outline:none}
+.jarvis-panel-head{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:12px 14px;border-bottom:1px solid var(--line);font-size:12px;letter-spacing:-.12px}
+.jarvis-panel-title{display:grid;gap:3px}.jarvis-panel-title span{color:#87958c;font-size:9px;font-weight:450;letter-spacing:0}
+.jarvis-panel-actions{display:flex;align-items:center;gap:4px}
+.jarvis-chat{display:flex;flex:1;flex-direction:column;min-height:0}
+/* Keep CopilotKit's transcript proportional to the compact floating panel. */
+.jarvis-chat [data-copilotkit]{font-family:Inter,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;font-size:14px;line-height:1.55}
+.jarvis-chat svg{max-width:100%;height:auto}
+.jarvis-chat pre{max-width:100%;overflow-x:auto;font-size:12px;line-height:1.45}
+.jarvis-chat :is(p,li){font-size:14px;line-height:1.55}
+.jarvis-chat .mermaid,.jarvis-chat [class*="mermaid"]{width:100%;max-width:100%;overflow-x:auto}
+.jarvis-chat .mermaid svg,.jarvis-chat [class*="mermaid"] svg{display:block;width:100%;min-width:0;height:auto;max-height:300px;font-family:Inter,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}
+.jarvis-gate{margin:0;padding:11px 13px;border-bottom:1px solid var(--line);background:#fff6f2;color:#8b4a35;font-size:10px;line-height:1.55}
+/* On /assistant the same panel is placed by the page, so it stops being a floating card. */
+.jarvis-inpage{flex:1;min-height:0;border:0;border-radius:0;background:transparent;box-shadow:none}
+.jarvis-slot{display:flex;flex:1;flex-direction:column;min-height:0}
+.assistant-inspect{display:grid;gap:8px;padding-top:11px;border-top:1px solid var(--line);font-size:10px;color:#718078}
+.assistant-inspect summary{cursor:pointer;color:#4c6b5b;font-weight:650;list-style:none}
+.assistant-inspect summary::-webkit-details-marker{display:none}
+.assistant-inspect summary:before{content:"› ";display:inline-block}
+.assistant-inspect[open] summary:before{content:"⌄ "}
+.assistant-messages{display:grid;gap:4px;margin:0;padding:0;list-style:none}
+.assistant-message-row{display:flex;align-items:flex-start;gap:6px;padding:7px;border-radius:7px;background:#f7faf7}
+.assistant-message-main{display:grid;flex:1;min-width:0;gap:3px;font-size:9px;color:#7e8b83;overflow-wrap:anywhere}
+.assistant-message-main b{color:#5d6f66;font-size:10px}
+.assistant-message-main time{font-weight:500}
+.assistant-message-row .table-action{flex:0 0 auto}
+kbd{padding:1px 5px;border:1px solid var(--line);border-radius:4px;background:#f6f8f6;color:#6c7c73;font-family:inherit;font-size:8px}
+.disclosure-card{max-width:560px}
+.disclosure-card .panel-note{font-size:11px}
+
+/* ---- Assistant: summary cards ---------------------------------------------------------- */
+.summary-card{display:grid;gap:10px}
+.summary-card-empty{background:linear-gradient(0deg,#fbfcfa,#fbfcfa)}
+/* A card written against records that have since moved gets a warmer frame: the point is that
+   you notice it without reading the small print. */
+.summary-card-stale{border-color:#f0dcc2;background:linear-gradient(0deg,#fffdf9,#fff)}
+.summary-period{margin-left:8px;padding:3px 7px;border-radius:20px;background:#f1f5f1;color:#5f7a6b;font-size:9px;font-weight:700;letter-spacing:.3px;vertical-align:1px}
+.summary-actions{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.summary-generate{min-height:32px;padding:7px 12px;font-size:10px}
+.summary-read{display:grid;gap:9px}
+/* Verdict first, at a size that reads as the headline of the card rather than body text. */
+.summary-lead{margin:0;color:var(--ink);font-size:13.5px;font-weight:680;line-height:1.5;letter-spacing:-.2px}
+.summary-lead-peek{opacity:.88;font-size:12px}
+.summary-points{display:grid;gap:6px;margin:0;padding:0;list-style:none}
+.summary-point{display:grid;grid-template-columns:13px auto minmax(0,1fr);align-items:baseline;gap:8px;padding:7px 10px;border-radius:8px;background:#f6f8f6;color:#2c3d37;font-size:11.5px;line-height:1.55}
+.summary-point-mark{font-size:11px;font-weight:800;text-align:center;color:#93a098}
+.summary-point-label{font-size:8px;font-weight:750;letter-spacing:.7px;text-transform:uppercase;color:#8b988f;white-space:nowrap}
+.summary-point-text{min-width:0;overflow-wrap:anywhere}
+.summary-point-plus{background:#f0f7f2}
+.summary-point-plus .summary-point-mark,.summary-point-plus .summary-point-label{color:#378564}
+.summary-point-watch{background:#fdf5ea}
+.summary-point-watch .summary-point-mark,.summary-point-watch .summary-point-label{color:#a97b45}
+.summary-point-note{background:#f4f5f4}
+.summary-point-note .summary-point-mark,.summary-point-note .summary-point-label{color:#8b988f}
+.summary-status{display:flex;align-items:center;gap:9px;flex-wrap:wrap;margin-top:1px}
+.summary-stamp{color:#93a098;font-size:9px}
+.summary-prose{display:grid;gap:8px;color:#2c3d37;font-size:11.5px;line-height:1.65}
+.summary-prose p{margin:0;overflow-wrap:anywhere}
+.summary-list{display:grid;gap:6px;margin:0;padding-left:17px;color:#2c3d37;font-size:11.5px;line-height:1.6}
+.summary-footnote{margin:0;color:#9aa69f;font-size:9px;letter-spacing:.2px}
+@media(max-width:760px){
+.summary-point{grid-template-columns:13px minmax(0,1fr);gap:6px}
+.summary-point-label{grid-column:2}
+.summary-point-text{grid-column:2}
+.summary-lead{font-size:12.5px}
+}
+
+/* ---- Assistant: settings --------------------------------------------------------------- */
+.assistant-settings{display:grid;gap:12px}
+.assistant-settings .form-grid{gap:11px}
+.assistant-settings code{padding:1px 4px;border-radius:4px;background:#f1f4f1;color:#3d5a4d;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:9.5px}
+.assistant-settings em{font-style:normal;color:#8b978f;font-weight:500}
+.assistant-check{display:flex;align-items:flex-start;gap:9px;color:#718078;font-size:10px;line-height:1.6}
+.assistant-check input{flex:0 0 auto;margin-top:1px}
+.assistant-buttons{flex-wrap:wrap}
+.assistant-buttons .button{min-height:34px}
+.assistant-result{margin:0;padding:9px 11px;border-radius:7px;font-size:10px;line-height:1.6}
+.assistant-result-ok{background:#eff6f0;color:#35695a}
+.assistant-result-bad{background:#fff6f2;color:#9b533d}
+.assistant-key-source{padding-top:11px;border-top:1px solid var(--line)}
+.assistant-mcp-status{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:12px}
+.assistant-mcp-status .button{min-height:32px;padding:7px 11px;font-size:10px}
+.assistant-tool-list{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:5px;max-height:320px;overflow:auto;padding:2px}
+.assistant-tool{display:flex;align-items:flex-start;gap:8px;padding:8px 9px;border:1px solid var(--line);border-radius:8px;background:#fff;font-size:10px;color:#4b5b52}
+.assistant-tool:hover{background:#f8faf7}
+.assistant-tool input{flex:0 0 auto;margin-top:2px}
+.assistant-tool-blocked{background:#faf9f6;color:#9c978a;border-color:#eeece5}
+.assistant-tool-name{display:grid;gap:3px;min-width:0}
+.assistant-tool-name code{padding:1px 4px;border-radius:4px;background:#eef4ef;color:#3d5a4d;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:9.5px}
+.assistant-tool-blocked .assistant-tool-name code{background:#f0efe9;color:#8b8578}
+.assistant-tool-desc{color:#93a098;font-size:9px;line-height:1.5;overflow-wrap:anywhere}
+.assistant-disclosure{display:grid;gap:9px;padding:11px 12px;border:1px solid var(--line);border-radius:9px;background:#fbfcfa}
+.assistant-disclosure summary{cursor:pointer;color:#4c6b5b;font-size:10px;font-weight:650;list-style:none}
+.assistant-disclosure summary::-webkit-details-marker{display:none}
+.assistant-disclosure summary:before{content:"› ";display:inline-block}
+.assistant-disclosure[open] summary:before{content:"⌄ "}
+.assistant-disclosure .panel-note{font-size:10px;overflow-wrap:anywhere}
+@media(max-width:1050px){.assistant-shell{grid-template-columns:1fr}.assistant-chat{min-height:560px}.assistant-tool-list{grid-template-columns:1fr}}
+/* Below 760px the sidebar becomes a 61px bottom bar, so the launcher and the panel both have to clear it:
+   an icon the bar swallows is an icon that is not "on every page" (FR-11). */
+@media(max-width:760px){.assistant-conversations{max-height:230px}.assistant-chat{min-height:0}.jarvis-launcher{right:14px;bottom:calc(61px + 14px);width:48px;height:48px;font-size:18px}.jarvis-floating{right:8px;left:8px;bottom:calc(61px + 8px);width:auto;height:min(74vh,calc(100vh - 61px - 24px))}}

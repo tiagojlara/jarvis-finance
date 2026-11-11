@@ -1,5 +1,9 @@
 import Logo from './Logo.jsx';
 
+// Ask Jarvis is deliberately not in this list. The assistant is a launcher present on every page
+// (components/AssistantDock.jsx), which was the point of moving it out of a dedicated page; the /assistant
+// route still works as a deep link and as the expanded conversation view. Six entries here also keeps the
+// two nav groups below on separate rows — slice(0,6) is "YOUR FINANCES", slice(6) is "PLAN & SETTINGS".
 const pages = [
   ['overview', '◫', 'Overview'], ['portfolio', '▤', 'Portfolio'],
   ['networth', '⌂', 'Net worth'],

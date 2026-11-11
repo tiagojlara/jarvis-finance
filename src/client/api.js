@@ -16,6 +16,26 @@ export const api = async (path, options = {}) => {
   if (!response.ok) throw new Error(data.error || response.statusText);
   return data;
 };
+// Assistant endpoints are their own tree (/api/assistant/...), never the generic
+// /api/:table CRUD surface, so nothing here can touch a financial record.
+export const assistantApi = (path = '', options = {}) => api(`assistant/${path}`, options);
+
+// No streaming helper lives here any more. The assistant's answer arrives over the CopilotKit endpoint
+// (`/api/copilotkit`, components/JarvisChat.jsx), which owns its own transport and event folding; the
+// hand-rolled `POST /api/assistant/chat` reader that used to sit in this file was deleted with the route
+// it served. What the client still needs from this module is the plain JSON surface: conversations,
+// messages, disclosure, settings — `assistantApi` below.
+
+// Server stamps are UTC instants (history.js and the summary rows both normalise them), so
+// they need an explicit local rendering — a raw ISO string in the UI reads as a machine log.
+export const stamp = (value, { time = true } = {}) => {
+  if (!value) return '';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return String(value);
+  const day = date.toLocaleDateString();
+  return time ? `${day} ${date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}` : day;
+};
+
 export const money = (value, currency = 'EUR', digits = 0) => value == null ? '—' :
   new Intl.NumberFormat(undefined, { style: 'currency', currency, maximumFractionDigits: digits }).format(value);
 export const today = () => new Date().toISOString().slice(0, 10);
