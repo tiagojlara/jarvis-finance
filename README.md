@@ -1,5 +1,9 @@
 # Tamanduá Finance · Personal portfolio planner
 
+<p align="center">
+  <img src="public/tamandua-logo.png" alt="Logo Tamanduá" width="520">
+</p>
+
 A local-first personal investment tracker and retirement planning tool. It is for tracking and scenario exploration, not financial advice, and it does not trade.
 
 The interface uses React components, Recharts for responsive interactive charts, Vite for the local development server and production bundle, and Tailwind CSS v4 through its Vite plugin. The API remains a local Express server backed by SQLite.
