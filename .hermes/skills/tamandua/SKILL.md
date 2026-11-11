@@ -1,6 +1,6 @@
 ---
-name: jarvis-finance
-description: Query and maintain the user's local jarvis-finance portfolio via the jarvis MCP tools — holdings, transactions, dividends, FX rates, net worth, the cash-flow income/spending ledger, and recording manual prices, FX rates, dividend payments, or cash-flow entries. Use when asked about the portfolio, assets, cash, dividends, income, spending, or currency conversions.
+name: tamandua
+description: Query and maintain the user's local tamandua portfolio via the tamandua MCP tools — holdings, transactions, dividends, FX rates, net worth, the cash-flow income/spending ledger, and recording manual prices, FX rates, dividend payments, or cash-flow entries. Use when asked about the portfolio, assets, cash, dividends, income, spending, or currency conversions.
 version: 1.4.0
 platforms: [macos]
 metadata:
@@ -9,15 +9,15 @@ metadata:
     tags: [portfolio, mcp, personal-finance]
 ---
 
-# Jarvis Finance portfolio assistant
+# Tamanduá Finance portfolio assistant
 
-All portfolio access goes through the `jarvis` MCP server (the local jarvis-finance
+All portfolio access goes through the `tamandua` MCP server (the local tamandua
 app at `http://127.0.0.1:3000/mcp`). Tools appear namespaced, e.g.
-`jarvis__get_summary`, `jarvis__save_price` — check the live tool list for exact names.
+`tamandua__get_summary`, `tamandua__save_price` — check the live tool list for exact names.
 
 ## Where personal facts live (read before editing this skill)
 
-This file is **method only** — it should still read correctly for somebody else's jarvis
+This file is **method only** — it should still read correctly for somebody else's tamandua
 install. Person-specific facts never go here, and are never restated here: real names, family
 members, account/asset/category **ids**, bank or card numbers, which categories this user
 retired or invented, merchant→category mappings, and any "the user always/never does X" rule.
@@ -38,10 +38,10 @@ Read it before touching spending, income, imports or dividends.
   writes — those are already in this user's rows, so they are personal data.
 - Three destinations, by who they help: a fact about **this person's** data → the profile file.
   Detail about **one format or task** (a CSV's columns, a PDF's layout, a website's quirks) → a
-  topic file under `references/`, listed below. Something true of **every** jarvis conversation
+  topic file under `references/`, listed below. Something true of **every** tamandua conversation
   → this file, written impersonally. Length here is paid for by every session; length in a
   reference file is paid for only by the sessions that open it.
-- The profile records **names, not ids**: this user edits accounts and categories in the jarvis
+- The profile records **names, not ids**: this user edits accounts and categories in the tamandua
   UI between runs, so resolve every id live (`list_accounts`, `list_cash_flow_categories`,
   `list_assets`) and trust the tool over anything written down, including this skill.
 
@@ -164,7 +164,7 @@ no spending. Tools: `get_cash_flow_summary` (one month, per currency), `list_cas
 - Which categories this user actually uses — and which seeded defaults were deliberately
   retired — is in `references/import-profile.md`. Never assume the defaults are all live, and
   never add a personal taxonomy to this skill; `list_cash_flow_categories` gives the current set.
-- Pitfall: the user edits entries and categories directly in the jarvis UI between agent runs.
+- Pitfall: the user edits entries and categories directly in the tamandua UI between agent runs.
   Never batch-update from remembered or hardcoded state — re-fetch `list_cash_flow_transactions`
   live, select by current `category_id`, and trust what the tool returns over earlier assumptions.
 
@@ -181,7 +181,7 @@ the profile, because everything except the profile is committed. This section ho
 invariants that hold for any format:
 
 - **Names, never remembered ids.** Resolve accounts, categories and assets live — this user
-  edits them in the jarvis UI between runs, so a written-down id is a hypothesis.
+  edits them in the tamandua UI between runs, so a written-down id is a hypothesis.
 - **Checksum before writing,** against the statement's own totals, to the smallest currency
   unit. A mismatch means re-parse; never write first and reconcile later.
 - **Transfers are not spending.** Payments onto a card, own-account moves and internal broker

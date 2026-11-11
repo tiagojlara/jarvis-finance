@@ -10,12 +10,12 @@ const path = require('node:path');
 const express = require('express');
 
 // An explicitly provisioned key keeps these tests off the macOS Keychain, as in assistant.test.js.
-process.env.JARVIS_ASSISTANT_KEY = '0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef';
-delete process.env.JARVIS_ASSISTANT_KEY_FILE;
+process.env.TAMANDUA_ASSISTANT_KEY = '0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef';
+delete process.env.TAMANDUA_ASSISTANT_KEY_FILE;
 
 const { createApp } = require('../src/app');
 const { createCopilotModule, CopilotRunError, COPILOT_BASE_PATH, eventsFromSse } = require('../src/assistant/copilotRuntime');
-const { createJarvisAgent, createPolicyHooks, RECORD_AGENTS } = require('../src/assistant/copilotAgents');
+const { createTamanduaAgent, createPolicyHooks, RECORD_AGENTS } = require('../src/assistant/copilotAgents');
 const { runErrorEvent, ERROR_CODES } = require('../src/assistant/aguiBridge');
 const { BuiltInAgent } = require('@copilotkit/runtime/v2');
 const { EventType } = require('@ag-ui/core');
@@ -54,7 +54,7 @@ const textOf = (events) => events.filter((event) => event.type === EventType.TEX
 
 // The app under test, listening on an ephemeral loopback port — the same bind the product ships with.
 async function startApp() {
-  const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'jarvis-copilot-test-'));
+  const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'tamandua-copilot-test-'));
   let server;
   // `copilot` is returned so a test can drive the in-process route (`runLocal`, the summary cards' route)
   // against the same app that serves the socket, which is the only way to show both go through one gate.
@@ -246,9 +246,9 @@ test('runLocal raises a typed error instead of returning an empty answer', async
     },
   );
   await assert.rejects(() => runLocal({ agentId: 'echo', message: 'no thread' }), /threadId/);
-  // The stand-in is registered as `echo`, never as `jarvis`: an app that failed to wire the real agent
+  // The stand-in is registered as `echo`, never as `tamandua`: an app that failed to wire the real agent
   // should answer "no such agent", not a polite echo that a user would read as an answer about their money.
-  await assert.rejects(() => runLocal({ agentId: 'jarvis', threadId: 'local-3', message: 'am I overexposed?' }), (error) => {
+  await assert.rejects(() => runLocal({ agentId: 'tamandua', threadId: 'local-3', message: 'am I overexposed?' }), (error) => {
     assert.ok(error instanceof CopilotRunError, `got ${error.name}`);
     assert.doesNotMatch(error.message, /echo:/, 'the stand-in answered for the real agent');
     return true;
@@ -309,7 +309,7 @@ test('the mounted app refuses an unacknowledged run before the agent is built', 
     const response = await fetch(url, {
       method: 'POST',
       headers: { 'content-type': 'application/json', accept: 'text/event-stream' },
-      body: JSON.stringify(runBody({ threadId: '1', content: 'how much do I have?', agentId: 'jarvis' })),
+      body: JSON.stringify(runBody({ threadId: '1', content: 'how much do I have?', agentId: 'tamandua' })),
     });
     const raw = await response.text();
     assert.equal(response.status, 428, raw);
@@ -324,16 +324,16 @@ test('the mounted app refuses an unacknowledged run before the agent is built', 
   }
 });
 
-test('the gate lets an acknowledged client through to the real jarvis agent', async () => {
+test('the gate lets an acknowledged client through to the real tamandua agent', async () => {
   // The other half of that rename, checked against the app that ships: after the disclosure is accepted
-  // the request reaches `jarvis` — and the reply is the agent's own thread rule, which the stand-in does
+  // the request reaches `tamandua` — and the reply is the agent's own thread rule, which the stand-in does
   // not have. An echo here would mean the real agent is not registered, and a polite answer about
   // someone's money would be the failure mode.
   const { url, api, close } = await startApp();
   try {
     const accepted = await api('/api/assistant/disclosure', { method: 'POST' });
     assert.equal(accepted.status, 200, accepted.body);
-    const { response, events } = await postRun(url, runBody({ threadId: 'not-a-conversation', content: 'how much do I have?', agentId: 'jarvis' }));
+    const { response, events } = await postRun(url, runBody({ threadId: 'not-a-conversation', content: 'how much do I have?', agentId: 'tamandua' }));
     assert.equal(response.status, 200, typesOf(events).join(' -> '));
     assert.equal(events.at(-1).type, EventType.RUN_ERROR);
     assert.equal(events.at(-1).code, ERROR_CODES.threadRequired, JSON.stringify(events.at(-1)));
@@ -359,15 +359,15 @@ test('the policy gate is scoped to the agents that read records', async () => {
 
     // Framed the way the client frames it — `runId` and `messages` are validated even though a connect
     // reads neither, so a bare body is a 400 rather than evidence of anything.
-    const connect = await fetch(url, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ method: 'agent/connect', params: { agentId: 'jarvis' }, body: { threadId: '1', runId: 'connect-probe', messages: [] } }) });
+    const connect = await fetch(url, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ method: 'agent/connect', params: { agentId: 'tamandua' }, body: { threadId: '1', runId: 'connect-probe', messages: [] } }) });
     assert.equal(connect.status, 200, await connect.text());
 
-    const stop = await fetch(url, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ method: 'agent/stop', params: { agentId: 'jarvis', threadId: '1' }, body: {} }) });
+    const stop = await fetch(url, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ method: 'agent/stop', params: { agentId: 'tamandua', threadId: '1' }, body: {} }) });
     assert.notEqual(stop.status, 428, 'Stop was gated, which would strand a run that is already going');
 
     // And the gate is real for the record-reading agent on this same app, so the four passes above are
     // scoping, not an absent hook.
-    const gated = await fetch(url, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(runBody({ agentId: 'jarvis' })) });
+    const gated = await fetch(url, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(runBody({ agentId: 'tamandua' })) });
     assert.equal(gated.status, 428);
     assert.equal((await api('/api/assistant/disclosure', { method: 'POST' })).status, 200);
   } finally {
@@ -382,7 +382,7 @@ test('runLocal goes through the same gate as the browser', async () => {
   const { copilot, api, close } = await startApp();
   try {
     await assert.rejects(
-      () => copilot.runLocal({ agentId: 'jarvis', threadId: '1', message: 'how much do I have?' }),
+      () => copilot.runLocal({ agentId: 'tamandua', threadId: '1', message: 'how much do I have?' }),
       (error) => {
         assert.ok(error instanceof CopilotRunError, `got ${error.name}`);
         // The code is lifted out of the JSON body: without it, "you have not accepted the disclosure" and
@@ -398,7 +398,7 @@ test('runLocal goes through the same gate as the browser', async () => {
     // RUN_ERROR event on a 200 stream. Both lifts are asserted because the two failure shapes are
     // genuinely different and the cards have to survive either.
     await assert.rejects(
-      () => copilot.runLocal({ agentId: 'jarvis', threadId: '0', message: 'how much do I have?' }),
+      () => copilot.runLocal({ agentId: 'tamandua', threadId: '0', message: 'how much do I have?' }),
       (error) => {
         assert.equal(error.code, ERROR_CODES.threadRequired, error.message);
         assert.equal(error.status, undefined, 'a coded run error has no HTTP status — the stream said 200');
@@ -411,7 +411,7 @@ test('runLocal goes through the same gate as the browser', async () => {
 });
 
 test('an agent built without the hooks still gates inside itself', async () => {
-  // Defence in depth, asserted rather than assumed: `runJarvis` checks the acknowledgement too, so a
+  // Defence in depth, asserted rather than assumed: `runTamandua` checks the acknowledgement too, so a
   // module constructed without `createPolicyHooks` — a future mount that forgets the hooks, or a test
   // harness — cannot answer a record question either. The shape differs (a coded RUN_ERROR on a 200
   // stream, because the run did start) and that difference is why the client reads both `payload.code`
@@ -420,7 +420,7 @@ test('an agent built without the hooks still gates inside itself', async () => {
   const history = { get: () => ({ id: 1 }) };
   let ran = 0;
   const assistant = { run: async function* () { ran += 1; yield { type: 'delta', text: 'should not be reached' }; } };
-  const agent = createJarvisAgent({ assistant, history, store });
+  const agent = createTamanduaAgent({ assistant, history, store });
   const { url, close } = await startWith(createCopilotModule({ extraAgents: async () => ({ echo: agent }) }));
   try {
     const { response, events } = await postRun(url, runBody({ threadId: '1', content: 'how much do I have?' }));
@@ -442,15 +442,15 @@ test('createPolicyHooks reads the route, not the request body', async () => {
   const disclosure = { title: 'What the assistant sends', body: ['one', 'two'] };
   const pending = { acknowledgement: () => ({ acknowledgedAt: null }) };
   const accepted = { acknowledgement: () => ({ acknowledgedAt: '2026-11-10T09:00:00.000Z' }) };
-  const run = { method: 'agent/run', agentId: 'jarvis' };
+  const run = { method: 'agent/run', agentId: 'tamandua' };
 
   assert.equal(createPolicyHooks({ store: accepted, disclosure }).onBeforeHandler({ route: run }), undefined,
     'an acknowledged run is passed through, unchanged');
   assert.equal(createPolicyHooks({ store: pending, disclosure }).onBeforeHandler({ route: { method: 'agent/run', agentId: 'echo' } }), undefined,
     'the transport stand-in reads no records, so it is not gated');
   assert.equal(createPolicyHooks({ store: pending, disclosure }).onBeforeHandler({ route: { method: 'info' } }), undefined);
-  assert.equal(createPolicyHooks({ store: pending, disclosure }).onBeforeHandler({ route: { method: 'agent/connect', agentId: 'jarvis' } }), undefined);
-  assert.equal(createPolicyHooks({ store: pending, disclosure }).onBeforeHandler({ route: { method: 'agent/stop', agentId: 'jarvis', threadId: '1' } }), undefined);
+  assert.equal(createPolicyHooks({ store: pending, disclosure }).onBeforeHandler({ route: { method: 'agent/connect', agentId: 'tamandua' } }), undefined);
+  assert.equal(createPolicyHooks({ store: pending, disclosure }).onBeforeHandler({ route: { method: 'agent/stop', agentId: 'tamandua', threadId: '1' } }), undefined);
   assert.equal(createPolicyHooks({ store: pending, disclosure }).onBeforeHandler({}), undefined, 'a route the runtime did not resolve is not a run');
 
   // A thrown Response can only be consumed once, so the status and the body are read from one capture.
@@ -472,7 +472,7 @@ test('createPolicyHooks reads the route, not the request body', async () => {
     (response) => { assert.equal(response.status, 428); return true; },
     'a suggestion run reads records too',
   );
-  assert.deepEqual([...RECORD_AGENTS].sort(), ['jarvis', 'summary'], 'a new record-reading agent must be added to the gated set');
+  assert.deepEqual([...RECORD_AGENTS].sort(), ['tamandua', 'summary'], 'a new record-reading agent must be added to the gated set');
   assert.throws(() => createPolicyHooks({ disclosure }), /store/, 'a gate that cannot read the acknowledgement refuses to be built');
 });
 

@@ -4,10 +4,10 @@ import Sidebar from './components/Sidebar.jsx';
 import Modal from './components/Modal.jsx';
 import { Activity, CashFlow, Dividends, NetWorth, Overview, Planning, Portfolio, Settings } from './components/Views.jsx';
 import Assistant from './components/Assistant.jsx';
-import { JarvisProvider } from './jarvisState.jsx';
+import { TamanduaProvider } from './tamanduaState.jsx';
 
 const initialSettings = { homeCurrency: 'EUR', fxProvider: 'frankfurter', currentAge: 35, retirementAge: 65, monthlyContribution: 500, monthlyIncome: 2500, oneTimeContribution: 0, monthlyWithdrawal: 0, inflation: .02, scenarios: [.03, .05, .07] };
-const titles = { overview: 'Overview', portfolio: 'Portfolio', networth: 'Net worth', activity: 'Activity', dividends: 'Dividends', cashflow: 'Cash flow', assistant: 'Ask Jarvis', planning: 'Retirement plan', settings: 'Settings & backup' };
+const titles = { overview: 'Overview', portfolio: 'Portfolio', networth: 'Net worth', activity: 'Activity', dividends: 'Dividends', cashflow: 'Cash flow', assistant: 'Ask Tamanduá', planning: 'Retirement plan', settings: 'Settings & backup' };
 const routes = ['overview', 'portfolio', 'networth', 'activity', 'dividends', 'cashflow', 'assistant', 'planning', 'settings'];
 const pathFor = (page) => (page === 'overview' ? '/' : `/${page}`);
 const pageFromLocation = () => {
@@ -33,7 +33,7 @@ export default function App() {
     return () => window.removeEventListener('popstate', onPop);
   }, []);
   useEffect(() => {
-    document.title = `Jarvis Finance · ${titles[page]}`;
+    document.title = `Tamanduá · ${titles[page]}`;
     // Normalize any unknown deep link (e.g. /anything) back to the page we actually render.
     if (window.location.pathname !== pathFor(page)) window.history.replaceState({ page }, '', pathFor(page));
   }, [page]);
@@ -86,9 +86,9 @@ export default function App() {
     const header = ['Name', 'Ticker', 'Type', 'Currency', 'Quantity', 'Cost basis', 'Latest price', 'Price date', 'Price source', 'Current value', 'Unrealized gain'];
     const rows = data.summary.holdings.map((h) => [h.name, h.ticker, h.type, h.currency, h.quantity, h.cost_basis, h.price, h.price_date, h.price_source, h.current_value, h.unrealized_gain]);
     const blob = new Blob([[header, ...rows].map((row) => row.map(escapeCsv).join(',')).join('\r\n')], { type: 'text/csv;charset=utf-8' });
-    download(blob, `jarvis-finance-portfolio-${new Date().toISOString().slice(0, 10)}.csv`);
+    download(blob, `tamandua-portfolio-${new Date().toISOString().slice(0, 10)}.csv`);
   };
-  const backup = async () => { const file = await api('backup'); download(new Blob([JSON.stringify(file, null, 2)], { type: 'application/json' }), `jarvis-finance-backup-${new Date().toISOString().slice(0, 10)}.json`); };
+  const backup = async () => { const file = await api('backup'); download(new Blob([JSON.stringify(file, null, 2)], { type: 'application/json' }), `tamandua-backup-${new Date().toISOString().slice(0, 10)}.json`); };
   useEffect(() => { const listener = () => backup(); window.addEventListener('backup-data', listener); return () => window.removeEventListener('backup-data', listener); }, [data]);
   const restore = async (event) => {
     const file = event.target.files?.[0]; if (!file) return;
@@ -112,14 +112,14 @@ export default function App() {
     planning: <Planning settings={settings} setSettings={updateSettings} homeValue={homeValue}/>,
     settings: <Settings data={data} settings={settings} onHomeCurrency={updateSettings} onDelete={deleteRecord} onRefresh={refresh}/>,
   };
-  // JarvisProvider wraps the whole shell, not just the assistant page: the chat icon is on every page, and
+  // TamanduaProvider wraps the whole shell, not just the assistant page: the chat icon is on every page, and
   // the conversation it opens is the same one /assistant shows expanded.
-  return <JarvisProvider page={page} revision={revision} navigate={navigate}><div className="app-shell min-h-screen"><Sidebar page={page} navigate={navigate}/><main className="main-content"><header className="topbar flex items-center justify-between"><div><div className="eyebrow">PERSONAL WEALTH</div><h1>{titles[page]}</h1></div><div className="topbar-actions"><label className="topbar-currency" title="Home currency for totals, charts, and planning"><span>HOME</span><select aria-label="Home currency" value={settings.homeCurrency} onChange={(event) => updateSettings({ homeCurrency: event.target.value })}>{currencies.map((c) => <option key={c}>{c}</option>)}</select></label><button className="button button-quiet desktop-button" onClick={exportCsv}>Export CSV</button><button className="button button-primary" onClick={() => addRecord('transaction')}>＋ Add activity</button></div></header>
+  return <TamanduaProvider page={page} revision={revision} navigate={navigate}><div className="app-shell min-h-screen"><Sidebar page={page} navigate={navigate}/><main className="main-content"><header className="topbar flex items-center justify-between"><div><div className="eyebrow">PERSONAL WEALTH</div><h1>{titles[page]}</h1></div><div className="topbar-actions"><label className="topbar-currency" title="Home currency for totals, charts, and planning"><span>HOME</span><select aria-label="Home currency" value={settings.homeCurrency} onChange={(event) => updateSettings({ homeCurrency: event.target.value })}>{currencies.map((c) => <option key={c}>{c}</option>)}</select></label><button className="button button-quiet desktop-button" onClick={exportCsv}>Export CSV</button><button className="button button-primary" onClick={() => addRecord('transaction')}>＋ Add activity</button></div></header>
     <div className="notice"><span>✳</span> Planning tool only · Estimates are uncertain and are not financial advice.</div>
     {error && <div className="error-banner" role="status"><span>{error}</span><button onClick={() => setError('')} aria-label="Dismiss">×</button></div>}
     {busy ? <div className="loading-state">Opening your local portfolio…</div> : content[page]}
     <footer className="app-footer"><span>● Stored on this device</span><span>Manual prices are not live quotes</span><button className="mobile-export" onClick={exportCsv}>Export CSV</button></footer>
-    </main><Modal type={modal} data={data} existing={editing} onClose={() => { setModal(null); setEditing(null); }} onSave={saveRecord}/><input id="restore-file" className="hidden-input" type="file" accept="application/json" onChange={restore}/></div></JarvisProvider>;
+    </main><Modal type={modal} data={data} existing={editing} onClose={() => { setModal(null); setEditing(null); }} onSave={saveRecord}/><input id="restore-file" className="hidden-input" type="file" accept="application/json" onChange={restore}/></div></TamanduaProvider>;
 }
 
 function download(blob, filename) { const url = URL.createObjectURL(blob); const link = document.createElement('a'); link.href = url; link.download = filename; link.click(); URL.revokeObjectURL(url); }

@@ -2,7 +2,7 @@
 
 Read this when the user hands over a credit-card invoice PDF whose transaction tables print
 **side by side** (the usual two-column layout). **Personal facts are not here** — which card maps
-to which jarvis account, whose supplementary cards appear on the same invoice, the confirmed
+to which tamandua account, whose supplementary cards appear on the same invoice, the confirmed
 merchant→category pairs, and the exact statement-tag string his existing rows carry — all of that
 is in `references/import-profile.md`. No institution name belongs in this file either: it is
 tracked in git, the profile is not.
@@ -22,7 +22,7 @@ tracked in git, the profile is not.
 5. Save the settled statement-currency column (`Belopp`) as-is: it already includes the
    foreign-currency fee. Never the original foreign amount.
 6. Skip the payment *onto* the card (`Inbetalningar`, negative CR) — it is a transfer, and importing
-   it counts the spending twice. Supplementary-card purchases belong to the same jarvis account
+   it counts the spending twice. Supplementary-card purchases belong to the same tamandua account
    as the main cardholder's, tagged in the description.
 7. Categorise from the profile's confirmed merchant→category pairs. Anything not listed: propose
    the mapping, get an explicit OK, then append the pair to the profile file.

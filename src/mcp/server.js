@@ -35,7 +35,7 @@ function dateClauses(where, params, args) {
 
 function buildToolServer(db) {
   const server = new McpServer(
-    { name: 'jarvis-finance', version: '1.0.0' },
+    { name: 'tamandua', version: '1.0.0' },
     {
       instructions: 'Local-first personal portfolio and retirement planner. Prices, FX rates, and valuations are dated manual or provider snapshots, never live quotes; amounts in different currencies are not converted unless stated. The data supports scenario tracking, not financial advice — do not present outputs as guarantees.',
     },
@@ -445,7 +445,7 @@ function createMcpRouter({ db }) {
       // without an SSE push channel answers 405 — with a body that explains itself, so
       // "is it down?" answers itself too.
       return res.status(405).json({
-        error: 'jarvis-finance MCP endpoint: not a web page. Agents connect by POSTing JSON-RPC to this URL (initialize → notifications/initialized → tools/*). If you are here from a browser, the API server is up — nothing is wrong.',
+        error: 'tamandua MCP endpoint: not a web page. Agents connect by POSTing JSON-RPC to this URL (initialize → notifications/initialized → tools/*). If you are here from a browser, the API server is up — nothing is wrong.',
         transport: 'streamable-http',
         mcp_version: '2025-06-18',
       });

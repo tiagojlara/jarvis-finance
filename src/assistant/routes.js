@@ -24,8 +24,8 @@ const MONTH = /^\d{4}-\d{2}$/;
 const DISCLOSURE = {
   title: 'What the assistant sends to your model endpoint',
   body: [
-    'Jarvis keeps all financial records on this machine, and the assistant reads them through this app\'s own local MCP connection.',
-    'To answer a question or write a summary, the app sends to the model endpoint you configured: your question, the earlier messages of that conversation, and the records the model reads back from the local Jarvis tools (account, asset, transaction, price and cash-flow figures). Model endpoints are usually remote, so those figures leave this machine when you ask a question.',
+    'Tamanduá keeps all financial records on this machine, and the assistant reads them through this app\'s own local MCP connection.',
+    'To answer a question or write a summary, the app sends to the model endpoint you configured: your question, the earlier messages of that conversation, and the records the model reads back from the local Tamanduá tools (account, asset, transaction, price and cash-flow figures). Model endpoints are usually remote, so those figures leave this machine when you ask a question.',
     'The app does not send your records to any other service, and it never sends the API token anywhere except the endpoint you configured.',
     'Chat history, settings and summaries are stored in this app\'s database only, and you can delete them at any time. Deleting a conversation does not delete any financial record.',
     'The assistant is read-only: it cannot add, change or remove anything. It is not financial or tax advice.',
@@ -118,9 +118,9 @@ function createAssistantRouter({ db, dataDir, mcpUrl, keyOptions = {} } = {}) {
   // Per-tool switches. A tool outside the read-only allowlist cannot be enabled at all —
   // this surface only ever narrows what the assistant is given.
   router.put('/api/assistant/mcp/tools/:name', (req, res) => {
-    const name = req.params.name.startsWith('jarvis_') ? req.params.name.slice('jarvis_'.length) : req.params.name;
+    const name = req.params.name.startsWith('tamandua_') ? req.params.name.slice('tamandua_'.length) : req.params.name;
     if (!READ_ONLY_TOOLS.includes(name)) {
-      return res.status(400).json({ error: `"${name}" is not a read-only Jarvis tool, so the assistant cannot expose it. Phase one reads records only.` });
+      return res.status(400).json({ error: `"${name}" is not a read-only Tamanduá tool, so the assistant cannot expose it. Phase one reads records only.` });
     }
     store.setToolEnabled(name, (req.body || {}).enabled === true);
     res.json({ ok: true, disabledTools: [...store.toolState().disabled] });

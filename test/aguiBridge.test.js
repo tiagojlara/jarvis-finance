@@ -102,7 +102,7 @@ const SCENARIOS = {
   'a stopped answer': [{ type: 'delta', text: 'Half an ', step: 0 },
     { type: 'done', messageId: 12, conversationId: 7, model: 'fake-model', activity: [], refusals: [], aborted: true }],
   'a failure mid-answer': [{ type: 'delta', text: 'So far so', step: 0 },
-    { type: 'error', message: 'The model endpoint is not configured.', messageId: 12, conversationId: 7, code: 'jarvis_model_not_configured' }],
+    { type: 'error', message: 'The model endpoint is not configured.', messageId: 12, conversationId: 7, code: 'tamandua_model_not_configured' }],
   'a failure with no code': [{ type: 'error', message: 'Something went wrong.' }],
 };
 
@@ -245,7 +245,7 @@ test('a stopped answer says so, and a late event cannot follow the terminal', as
 test('a failure keeps its typed code, and an untyped one is named', async () => {
   const coded = await collect(script(SCENARIOS['a failure mid-answer']));
   assert.deepEqual(typesOf(coded), [EventType.TEXT_MESSAGE_START, EventType.TEXT_MESSAGE_CONTENT, EventType.TEXT_MESSAGE_END, EventType.RUN_ERROR]);
-  assert.equal(event(coded, EventType.RUN_ERROR).code, 'jarvis_model_not_configured');
+  assert.equal(event(coded, EventType.RUN_ERROR).code, 'tamandua_model_not_configured');
   assert.equal(event(coded, EventType.RUN_ERROR).message, 'The model endpoint is not configured.');
 
   const bare = await collect(script(SCENARIOS['a failure with no code']));
@@ -290,7 +290,7 @@ test('the bridge drives a real run through the runtime', async () => {
   // interleave into one valid stream, and the runner's merge of our RUN_FINISHED result has to survive.
   const { runLocal } = createCopilotModule({
     extraAgents: async () => ({
-      jarvis: new BuiltInAgent({
+      tamandua: new BuiltInAgent({
         type: 'custom',
         factory: (ctx) => toAguiEvents({
           source: script(SCENARIOS['an answer that consults a tool']),
@@ -302,7 +302,7 @@ test('the bridge drives a real run through the runtime', async () => {
   });
   // A non-numeric thread: the runtime's thread store is process-global, so summary and bridge runs must
   // not share ids with real conversation ids.
-  const { text, events } = await runLocal({ agentId: 'jarvis', threadId: 'bridge-e2e-1', message: 'am I overexposed?' });
+  const { text, events } = await runLocal({ agentId: 'tamandua', threadId: 'bridge-e2e-1', message: 'am I overexposed?' });
 
   assert.equal(typesOf(events).at(0), EventType.RUN_STARTED, 'no envelope');
   assert.equal(typesOf(events).at(-1), EventType.RUN_FINISHED);

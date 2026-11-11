@@ -21,7 +21,7 @@ export const api = async (path, options = {}) => {
 export const assistantApi = (path = '', options = {}) => api(`assistant/${path}`, options);
 
 // No streaming helper lives here any more. The assistant's answer arrives over the CopilotKit endpoint
-// (`/api/copilotkit`, components/JarvisChat.jsx), which owns its own transport and event folding; the
+// (`/api/copilotkit`, components/TamanduaChat.jsx), which owns its own transport and event folding; the
 // hand-rolled `POST /api/assistant/chat` reader that used to sit in this file was deleted with the route
 // it served. What the client still needs from this module is the plain JSON surface: conversations,
 // messages, disclosure, settings — `assistantApi` below.

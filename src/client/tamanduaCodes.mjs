@@ -7,14 +7,14 @@
 // "disclosure" in an ordinary sentence.
 //
 // test/copilotClientCodes.test.js asserts this table is identical to the server's, so the two cannot drift.
-export const JARVIS_CODES = {
-  threadRequired: 'jarvis_thread_required',
-  threadUnknown: 'jarvis_thread_unknown',
-  disclosureRequired: 'jarvis_disclosure_required',
-  inputInvalid: 'jarvis_input_invalid',
-  modelNotConfigured: 'jarvis_model_not_configured',
-  mcpUnreachable: 'jarvis_mcp_unreachable',
-  modelRequestFailed: 'jarvis_model_request_failed',
-  runStopped: 'jarvis_run_stopped',
-  runFailed: 'jarvis_run_failed',
+export const TAMANDUA_CODES = {
+  threadRequired: 'tamandua_thread_required',
+  threadUnknown: 'tamandua_thread_unknown',
+  disclosureRequired: 'tamandua_disclosure_required',
+  inputInvalid: 'tamandua_input_invalid',
+  modelNotConfigured: 'tamandua_model_not_configured',
+  mcpUnreachable: 'tamandua_mcp_unreachable',
+  modelRequestFailed: 'tamandua_model_request_failed',
+  runStopped: 'tamandua_run_stopped',
+  runFailed: 'tamandua_run_failed',
 };

@@ -33,16 +33,16 @@ const PROBE_BODY = [
   "  return new Response(JSON.stringify({ ok: true }), { status: 200, headers: { 'content-type': 'application/json' } });",
   "};",
   // An explicit key so nothing in the child touches the macOS Keychain of whoever runs the suite.
-  "process.env.JARVIS_ASSISTANT_KEY = '0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef';",
-  "delete process.env.JARVIS_ASSISTANT_KEY_FILE;",
+  "process.env.TAMANDUA_ASSISTANT_KEY = '0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef';",
+  "delete process.env.TAMANDUA_ASSISTANT_KEY_FILE;",
   "const fs = require('node:fs'); const os = require('node:os');",
   "const { createApp } = require('" + path.join(ROOT, 'src/app.js') + "');",
   "const copilot = require('" + path.join(ROOT, 'src/assistant/copilotRuntime.js') + "');",
-  "const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'jarvis-telemetry-'));",
+  "const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'tamandua-telemetry-'));",
   "const { app, db } = createApp({ dataDir, assistantMcpUrl: () => 'http://127.0.0.1:1/mcp' });",
   "const server = await new Promise((resolve) => { const s = app.listen(0, '127.0.0.1', () => resolve(s)); });",
   "const url = 'http://127.0.0.1:' + server.address().port + copilot.COPILOT_BASE_PATH;",
-  "const frame = JSON.stringify({ method: 'agent/run', params: { agentId: 'jarvis' }, body: { threadId: '1', runId: 'probe-1', tools: [], context: [], state: {}, forwardedProps: {}, messages: [{ id: 'm', role: 'user', content: 'any funds this month?' }] } });",
+  "const frame = JSON.stringify({ method: 'agent/run', params: { agentId: 'tamandua' }, body: { threadId: '1', runId: 'probe-1', tools: [], context: [], state: {}, forwardedProps: {}, messages: [{ id: 'm', role: 'user', content: 'any funds this month?' }] } });",
   "await fetch(url, { method: 'POST', headers: { 'content-type': 'application/json', accept: 'text/event-stream' }, body: frame }).then((r) => r.text());",
   // The card path: the same runtime, no socket. It raises the same capture, so it is covered too.
   "await copilot.createCopilotModule().runLocal({ agentId: 'echo', threadId: 'local-1', message: 'card', forwardedProps: { placement: 'overview', period: '2026-01' } });",
@@ -61,8 +61,8 @@ const PROBE = `(async () => {\n${PROBE_BODY}\n})().catch((error) => { console.er
 // otherwise, so "absent" means what a plain `npm start` would see rather than whatever this shell holds.
 function childEnv(overrides = {}) {
   const env = { ...process.env };
-  delete env.JARVIS_ASSISTANT_KEY;
-  delete env.JARVIS_ASSISTANT_KEY_FILE;
+  delete env.TAMANDUA_ASSISTANT_KEY;
+  delete env.TAMANDUA_ASSISTANT_KEY_FILE;
   delete env.COPILOTKIT_TELEMETRY_DISABLED;
   delete env.DO_NOT_TRACK;
   return { ...env, ...overrides };

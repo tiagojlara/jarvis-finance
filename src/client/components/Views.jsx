@@ -81,7 +81,7 @@ export function Overview({ data, homeValue, settings, navigate, revision = 0 }) 
     <Metric label="UNREALIZED ROI" value={roi === null ? '—' : `${roi >= 0 ? '+' : ''}${roi.toFixed(2)}%`} tone={roi === null ? '' : roi >= 0 ? 'text-positive' : 'text-negative'} detail="Gain ÷ cost basis · excludes cash and realized gains"/>
     <Metric label="DIVIDENDS RECEIVED" value={income} detail={<button className="text-action" onClick={() => navigate('dividends')}>View dividend history →</button>}/>
   </div>
-    <SummaryCard placement="overview" title="Jarvis summary · your holdings" navigate={navigate} revision={revision}/>
+    <SummaryCard placement="overview" title="Tamanduá summary · your holdings" navigate={navigate} revision={revision}/>
     <div className="content-grid content-grid-main"><Section title={`Portfolio value history · ${settings.homeCurrency}`}>
       <div className="period-controls" role="group" aria-label="Portfolio history period">{periods.map((option) => <button type="button" key={option} aria-pressed={period === option} className={period === option ? 'period-button selected' : 'period-button'} onClick={() => setPeriod(option)}>{option === '30D' ? '1M' : option === '90D' ? '3M' : option === '180D' ? '6M' : option === 'ALL' ? 'All' : option}</button>)}</div>
       <p className="panel-note">Historical holdings and cash balances converted using rates available on each date. Period change is not adjusted for contributions or withdrawals.</p>
@@ -217,7 +217,7 @@ export function CashFlow({ data, onAdd, onDelete, onEdit, navigate, revision = 0
       ]; }).flat()}
       {!currenciesInUse.length && <Metric label="RECORDED CASH FLOW" value="—" detail={`Nothing recorded for ${periodLabel} yet. Income and spending you add show up here.`}/>}
     </div>
-    <SummaryCard placement="cashflow" period={month} title="Jarvis summary · cash flow" navigate={navigate} revision={revision}/>
+    <SummaryCard placement="cashflow" period={month} title="Tamanduá summary · cash flow" navigate={navigate} revision={revision}/>
     <div className="content-grid content-grid-main">
       <Section title={`Spending by category · ${periodLabel}`} className="cashflow-breakdown" action={categoryFilter ? <button type="button" className="text-action" onClick={() => setCategoryFilter('')}>Clear filter</button> : undefined}>
         {expenseRows.length ? <div className="flow-breakdown-grid">{currenciesInUse.map((currency) => { const rows = expenseRows.filter((row) => row.currency === currency); return rows.length ? <div className="flow-breakdown-card" key={currency}><div className="flow-breakdown-heading"><span>Spending</span><b>{currency}</b></div><FlowCategoryChart rows={rows} currency={currency} kind="expense" selectedCategory={categoryFilter} onSelectCategory={setCategoryFilter}/></div> : null; })}</div> : <Empty>No spending recorded for this period. Add an expense entry to see where it went.</Empty>}

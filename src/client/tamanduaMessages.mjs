@@ -13,7 +13,7 @@
 //     `role === "tool" && toolCallId === call.id`;
 //   - a call with no tool message next to it is drawn as "in progress" forever, which is why every entry
 //     in `toolActivity` gets a result message, refused ones included;
-//   - nothing paints at all unless a tool-call renderer is registered (components/JarvisChat.jsx does).
+//   - nothing paints at all unless a tool-call renderer is registered (components/TamanduaChat.jsx does).
 //
 // Ids are derived from the persisted row id so React keys stay stable across re-reads of the same
 // conversation, and a row that arrives twice from two renders cannot duplicate a bubble.
@@ -43,7 +43,7 @@ function toolCallPair(activity, rowId, index) {
 export function historyToMessages(rows = []) {
   const messages = [];
   for (const row of rows) {
-    const id = `jarvis-${row.id}`;
+    const id = `tamandua-${row.id}`;
     if (row.role === 'user') {
       messages.push({ id, role: 'user', content: row.content || '' });
       continue;

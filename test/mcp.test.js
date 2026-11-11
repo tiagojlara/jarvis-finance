@@ -8,7 +8,7 @@ const { createApp } = require('../src/app');
 // Boots the real app (MCP router included) against a throwaway database and speaks
 // JSON-RPC to /mcp the way an MCP client would: initialize, then initialized, then calls.
 async function startMcp() {
-  const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'jarvis-finance-mcp-test-'));
+  const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'tamandua-mcp-test-'));
   const { app, db } = createApp({ dataDir });
   const server = await new Promise((resolve) => {
     const instance = app.listen(0, '127.0.0.1', () => resolve(instance));
@@ -45,7 +45,7 @@ async function startMcp() {
     const { status, payload, headers } = await rpc('initialize', {
       protocolVersion: '2025-06-18',
       capabilities: {},
-      clientInfo: { name: 'jarvis-test', version: '1.0' },
+      clientInfo: { name: 'tamandua-test', version: '1.0' },
     });
     assert.equal(status, 200, JSON.stringify(payload));
     state.sessionId = headers.get('mcp-session-id');
@@ -104,7 +104,7 @@ test('MCP handshake lists read and write tools', async (t) => {
   const client = await startMcp();
   t.after(client.close);
   const init = await client.initialize();
-  assert.equal(init.result.serverInfo.name, 'jarvis-finance');
+  assert.equal(init.result.serverInfo.name, 'tamandua');
   const names = await client.listTools();
   for (const expected of [
     'get_summary', 'list_assets', 'list_transactions', 'list_prices', 'list_fx_rates', 'get_net_worth', 'save_price', 'save_fx_rate', 'save_dividend',

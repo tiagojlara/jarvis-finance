@@ -1,7 +1,7 @@
 // The CopilotKit endpoint: transport and UI protocol for the assistant, and the in-process
 // invocation the summary cards run through.
 //
-// CopilotKit supplies the wire. It does not supply the brain. Every Jarvis answer still comes from
+// CopilotKit supplies the wire. It does not supply the brain. Every Tamandua answer still comes from
 // `assistant.run()` (src/assistant/agent.js), which owns the read-only guard, the MCP connection, the
 // decrypted token and the SQLite history — the guarantees in docs/agent-product-requirements.md
 // FR-3, FR-8 and §9 live there and are translated into AG-UI events by aguiBridge.js, not re-implemented
@@ -44,29 +44,29 @@ class CopilotRunError extends Error {
   }
 }
 
-// The stand-in agent, registered as `echo` and NOT as `jarvis`. It exists so the transport can be
+// The stand-in agent, registered as `echo` and NOT as `tamandua`. It exists so the transport can be
 // tested without a model endpoint: echoed text, never records. The real surfaces arrive through
-// `extraAgents` below — copilotAgents.js registers `jarvis` (the chat, over `assistant.run()` + the
+// `extraAgents` below — copilotAgents.js registers `tamandua` (the chat, over `assistant.run()` + the
 // bridge) and later `summary` (the cards).
 //
-// Keeping the stand-in off the `jarvis` name is deliberate: if the app ever fails to register the real
+// Keeping the stand-in off the `tamandua` name is deliberate: if the app ever fails to register the real
 // agent, a request should answer "no such agent", not get a polite echo that looks like an answer.
 // `forwardedProps` is echoed because the summary agent reads {placement, period} out of it, and whether
 // it reaches the factory at all is a thing a test has to know rather than assume.
 async function* echoFactory(ctx) {
   const props = ctx.input.forwardedProps || {};
   const asked = ctx.input.messages.filter((m) => m.role === 'user').pop();
-  yield { type: EventType.TEXT_MESSAGE_START, messageId: 'jarvis-echo', role: 'assistant' };
+  yield { type: EventType.TEXT_MESSAGE_START, messageId: 'tamandua-echo', role: 'assistant' };
   yield {
     type: EventType.TEXT_MESSAGE_CONTENT,
-    messageId: 'jarvis-echo',
+    messageId: 'tamandua-echo',
     delta: `echo:${asked ? asked.content : ''}|props:${JSON.stringify(props)}`,
   };
-  yield { type: EventType.TEXT_MESSAGE_END, messageId: 'jarvis-echo' };
+  yield { type: EventType.TEXT_MESSAGE_END, messageId: 'tamandua-echo' };
 }
 
 // `hooks` are the ones both entry points must obey — see the note on endpointOptions below.
-// `extraAgents` extends or replaces the registry: the bridge registers the real `jarvis` agent
+// `extraAgents` extends or replaces the registry: the bridge registers the real `tamandua` agent
 // through it, and a test can mount a scripted agent. It is called per request, like the registry
 // above, and spread last on purpose — an override is the point. Nothing outside this process can add
 // an agent, because the registry is only ever built here.

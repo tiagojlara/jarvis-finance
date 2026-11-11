@@ -5,12 +5,12 @@
 // preferred, a documented local provisioning method if not, and never the key beside the
 // ciphertext):
 //
-//   env      — JARVIS_ASSISTANT_KEY, for headless machines, CI, or a chosen secret manager.
+//   env      — the configured assistant key, for headless machines, CI, or a chosen secret manager.
 //              First, because setting it is an explicit statement of intent: honouring it
 //              before the Keychain keeps a provisioned machine from silently creating a
 //              Keychain item nobody asked for (and keeps tests off the user's keychain).
 //   keychain — macOS Keychain item, via /usr/bin/security. Nothing is written to disk.
-//   file     — JARVIS_ASSISTANT_KEY_FILE (default ~/.config/jarvis-finance/assistant.key),
+//   file     — the configured key file (default ~/.config/jarvis-finance/assistant.key),
 //              created 0600 on first use. Refused if it would sit inside the data directory.
 //
 // Every encrypted value records which source made its key, and decrypting asks *that* source
@@ -32,7 +32,7 @@ const KEY_BYTES = 32;
 const ALGORITHM = 'aes-256-gcm';
 const VERSION = 1;
 const DEFAULT_KEY_FILE = path.join(os.homedir(), '.config', 'jarvis-finance', 'assistant.key');
-const SOURCE_LABELS = { keychain: 'macOS Keychain', env: 'JARVIS_ASSISTANT_KEY', file: 'local key file' };
+const SOURCE_LABELS = { keychain: 'macOS Keychain', env: 'TAMANDUA_ASSISTANT_KEY', file: 'local key file' };
 
 class SecretKeyError extends Error {
   constructor(message) {
@@ -98,11 +98,12 @@ async function keyFromFile(filePath, { create }) {
 // never puts key material in a return value or an error message.
 async function resolveKey({ source, env = process.env, dataDir, platform = os.platform(), create = true } = {}) {
   const environment = env || {};
-  const keyFile = environment.JARVIS_ASSISTANT_KEY_FILE || DEFAULT_KEY_FILE;
+  // Keep the original Keychain item and default file path stable across the brand rename.
+  const keyFile = environment.TAMANDUA_ASSISTANT_KEY_FILE || environment.JARVIS_ASSISTANT_KEY_FILE || DEFAULT_KEY_FILE;
   if (dataDir) {
     const relative = path.relative(path.resolve(dataDir), path.resolve(keyFile));
     if (relative && !relative.startsWith('..') && !path.isAbsolute(relative)) {
-      throw new SecretKeyError(`The key file ${keyFile} sits inside the data directory, where the database lives. Set JARVIS_ASSISTANT_KEY_FILE to a path outside it.`);
+      throw new SecretKeyError(`The key file ${keyFile} sits inside the data directory, where the database lives. Set TAMANDUA_ASSISTANT_KEY_FILE to a path outside it.`);
     }
   }
 
@@ -115,8 +116,9 @@ async function resolveKey({ source, env = process.env, dataDir, platform = os.pl
         return { key: await keyFromKeychain({ create }), source: 'keychain' };
       }
       if (candidate === 'env') {
-        if (!environment.JARVIS_ASSISTANT_KEY) throw new Error('JARVIS_ASSISTANT_KEY is not set');
-        return { key: normalizeKey(environment.JARVIS_ASSISTANT_KEY, 'JARVIS_ASSISTANT_KEY'), source: 'env' };
+        const configuredKey = environment.JARVIS_ASSISTANT_KEY || environment.TAMANDUA_ASSISTANT_KEY;
+        if (!configuredKey) throw new Error('TAMANDUA_ASSISTANT_KEY is not set');
+        return { key: normalizeKey(configuredKey, 'assistant'), source: 'env' };
       }
       if (candidate === 'file') return { key: await keyFromFile(keyFile, { create }), source: 'file' };
       throw new Error(`"${candidate}" is not a known key source`);
@@ -133,7 +135,7 @@ async function resolveKey({ source, env = process.env, dataDir, platform = os.pl
       }
     }
   }
-  throw new SecretKeyError(`No usable encryption key (${failures.join('; ')}). Set JARVIS_ASSISTANT_KEY or JARVIS_ASSISTANT_KEY_FILE, or allow Keychain access for jarvis-finance.`);
+  throw new SecretKeyError(`No usable encryption key (${failures.join('; ')}). Set TAMANDUA_ASSISTANT_KEY or TAMANDUA_ASSISTANT_KEY_FILE, or allow Keychain access for Tamanduá.`);
 }
 
 async function encryptSecret(plaintext, options = {}) {
@@ -174,7 +176,7 @@ async function decryptSecret(record, options = {}) {
 async function describeKeySource(options = {}) {
   try {
     const { source } = await resolveKey({ ...options, create: false });
-    const detail = source === 'file' ? (options.env?.JARVIS_ASSISTANT_KEY_FILE || DEFAULT_KEY_FILE) : '';
+    const detail = source === 'file' ? (options.env?.TAMANDUA_ASSISTANT_KEY_FILE || options.env?.JARVIS_ASSISTANT_KEY_FILE || DEFAULT_KEY_FILE) : '';
     return { source, label: detail ? `${SOURCE_LABELS[source]} · ${detail}` : SOURCE_LABELS[source] };
   } catch (error) {
     return { source: null, label: null, error: error.message };

@@ -4,20 +4,20 @@ import { assistantApi } from './api.js';
 // Split out of this module's import graph on purpose. `npm run build` measures CopilotKit's UI stack at
 // 258 kB gzipped, and the launcher below has to be on screen at first paint of every page — so the chat is
 // fetched the first time it is actually wanted (`armed`) and the entry bundle stays what it was.
-const JarvisChat = lazy(() => import('./components/JarvisChat.jsx'));
+const TamanduaChat = lazy(() => import('./components/TamanduaChat.jsx'));
 
 // Everything the assistant surfaces share, held outside CopilotKit so it survives a chat remount and so
-// this module can sit in the entry bundle. The chat itself (components/JarvisChat.jsx) is loaded lazily
+// this module can sit in the entry bundle. The chat itself (components/TamanduaChat.jsx) is loaded lazily
 // and owns the CopilotKit provider; this file owns the parts that are ours: the conversation list, the
 // thread identity, the model-endpoint status line, and the §9 disclosure.
 //
 // That split is deliberate. The two surfaces — the floating launcher on every page and the full-width
 // conversation at /assistant — must never disagree about which conversation is open or whether the
 // disclosure has been accepted, and a context above both is the only place that cannot drift.
-const JarvisContext = createContext(null);
-export const useJarvis = () => useContext(JarvisContext);
+const TamanduaContext = createContext(null);
+export const useTamandua = () => useContext(TamanduaContext);
 
-export function JarvisProvider({ page, revision = 0, navigate, children }) {
+export function TamanduaProvider({ page, revision = 0, navigate, children }) {
   // The heavy chat module is only fetched once the person shows they want it: the first tap on the
   // launcher, or arriving on /assistant. Measured with `npm run build`, CopilotKit's UI stack is 258 kB
   // gzipped, and it has no business being on the critical path of a page that shows a holdings table.
@@ -77,7 +77,7 @@ export function JarvisProvider({ page, revision = 0, navigate, children }) {
   }, [setThread, setTranscript]);
 
   // A conversation is created when the panel is opened, not on first send, because the transport refuses a
-  // run with no thread it recognises (`jarvis_thread_required`): the id has to be in SQLite before the
+  // run with no thread it recognises (`tamandua_thread_required`): the id has to be in SQLite before the
   // first message goes out, and a browser cannot mint one. In-flight creates are shared, so the launcher
   // and the /assistant page mounting together produce one conversation rather than two.
   const ensureThread = useCallback(async () => {
@@ -188,28 +188,28 @@ export function JarvisProvider({ page, revision = 0, navigate, children }) {
     ensureThread, openConversation, startNewChat, removeConversation, renameConversation,
     loadConversations, loadSettings, ensureDisclosure, acknowledgeDisclosure, registerSlot,
   };
-  // The chat icon on every page (Ask Jarvis is no longer a nav entry). Plain HTML and CSS, rendered from
+  // The chat icon on every page (Ask Tamanduá is no longer a nav entry). Plain HTML and CSS, rendered from
   // this module so it exists before the chat module has even been requested. Hidden on /assistant, where
   // the conversation is the page itself, and while the panel is open, because the panel owns its close
   // control — two ways to do the same thing reads as a glitch.
-  const launcher = page !== 'assistant' && !open && <button type="button" className="jarvis-launcher" onClick={arm}
-    aria-label="Open Ask Jarvis" title={settings?.ready ? 'Ask Jarvis about your records' : 'Ask Jarvis — no model endpoint configured yet'}>
+  const launcher = page !== 'assistant' && !open && <button type="button" className="tamandua-launcher" onClick={arm}
+    aria-label="Open Ask Tamanduá" title={settings?.ready ? 'Ask Tamanduá about your records' : 'Ask Tamanduá — no model endpoint configured yet'}>
     <span aria-hidden="true">✦</span>
-    {settings && !settings.ready && <span className="jarvis-launcher-dot" aria-hidden="true"/>}
+    {settings && !settings.ready && <span className="tamandua-launcher-dot" aria-hidden="true"/>}
   </button>;
 
-  return <JarvisContext.Provider value={value}>
+  return <TamanduaContext.Provider value={value}>
     {children}
     {launcher}
-    {armed && <Suspense fallback={null}><JarvisChat/></Suspense>}
+    {armed && <Suspense fallback={null}><TamanduaChat/></Suspense>}
     <DisclosureModal/>
-  </JarvisContext.Provider>;
+  </TamanduaContext.Provider>;
 }
 
 // One instance, for both surfaces: whoever trips the disclosure gate gets the same modal, and the chat
 // module never has to own it.
 function DisclosureModal() {
-  const { disclosure, setDisclosure, acknowledgeDisclosure } = useJarvis();
+  const { disclosure, setDisclosure, acknowledgeDisclosure } = useTamandua();
   const boxRef = useRef(null);
   // It takes focus when it opens, so a keyboard user lands on the choice instead of tabbing through the
   // transcript to discover it (FR-11).

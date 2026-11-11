@@ -10,7 +10,7 @@ import './styles.css';
 // every page load of a local-first finance app, which is a worse answer to "is this fast on my machine"
 // than the one a floating chat icon is supposed to be.
 //
-// So the provider lives inside components/JarvisChat.jsx, which jarvisState.jsx pulls in with a dynamic
+// So the provider lives inside components/TamanduaChat.jsx, which tamanduaState.jsx pulls in with a dynamic
 // import the first time the launcher is pressed or /assistant is opened. Entry chunk after that split:
 // 310 kB (96 kB gzipped), unchanged — and the conversation costs 258 kB gzipped, once, on demand.
 createRoot(document.getElementById('root')).render(

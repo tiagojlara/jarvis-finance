@@ -1,24 +1,24 @@
-# Product requirements: Jarvis Finance Assistant
+# Product requirements: Tamanduá Finance Assistant
 
 **Status:** Draft  
 **Date:** 8 November 2026  
-**Product:** Jarvis Finance, local-first personal finance tracker
+**Product:** Tamanduá Finance, local-first personal finance tracker
 
 ## 1. Summary
 
-Add an in-app conversational assistant that can answer questions about the user's Jarvis Finance data and connect to configured MCP servers. Phase one focuses on chat and useful, locally cached AI summaries. Phase two adds document uploads, extraction, and reviewed ledger updates.
+Add an in-app conversational assistant that can answer questions about the user's Tamanduá Finance data and connect to configured MCP servers. Phase one focuses on chat and useful, locally cached AI summaries. Phase two adds document uploads, extraction, and reviewed ledger updates.
 
 The assistant is an organizing and data-entry tool, not a financial adviser or transaction executor. Any finance write must follow existing tool safeguards and require user review and confirmation.
 
 ## 2. Product context
 
-Jarvis Finance is a local-first React application with an Express API and SQLite database. It already serves an MCP endpoint at `/mcp`. The current MCP server exposes portfolio and cash-flow read tools and selected writes, including `save_price`, `save_fx_rate`, dividend operations, and cash-flow operations. It does not currently expose an upload or import workflow, and the web application does not host a chat or act as an MCP client.
+Tamanduá Finance is a local-first React application with an Express API and SQLite database. It already serves an MCP endpoint at `/mcp`. The current MCP server exposes portfolio and cash-flow read tools and selected writes, including `save_price`, `save_fx_rate`, dividend operations, and cash-flow operations. It does not currently expose an upload or import workflow, and the web application does not host a chat or act as an MCP client.
 
 The application tracks investments, cash balances, dividends, net worth inputs, and a separate income-and-spending ledger. Financial values retain their original currencies. Asset prices are dated snapshots, not live quotes. Statement imports must respect these distinctions and existing validation rules.
 
 ## 3. Goals
 
-1. Let a user ask natural-language questions about their Jarvis data and receive answers grounded in retrieved records.
+1. Let a user ask natural-language questions about their Tamanduá data and receive answers grounded in retrieved records.
 2. Provide useful AI summaries in relevant finance views, cached locally and refreshable on demand.
 3. Reuse the same validation and data semantics as the existing UI and API.
 4. Connect to explicitly configured MCP servers, with clear visibility into which tools are available and what data each tool may access.
@@ -49,15 +49,15 @@ The application tracks investments, cash balances, dividends, net worth inputs, 
 - Add an Assistant entry point in the application navigation and a responsive chat view.
 - Support text questions, conversation history, and a clear “new conversation” action. File attachments are out of scope for phase one.
 - Persist chat history locally in the application's database, with controls to inspect and delete conversations.
-- Ground answers in Jarvis data retrieved through narrowly scoped tools; show which records, date range, and currencies support each answer.
+- Ground answers in Tamanduá data retrieved through narrowly scoped tools; show which records, date range, and currencies support each answer.
 - Clearly label generated interpretation versus values read directly from the database.
 - If required data is unavailable, stale, incomplete, or ambiguous, say so and offer the next useful action.
-- Phase one chat is read-only with respect to Jarvis financial records. Phase two may add reviewed imports and writes; it must distinguish proposing an action from completing it, and stage all changes for review before execution.
+- Phase one chat is read-only with respect to Tamanduá financial records. Phase two may add reviewed imports and writes; it must distinguish proposing an action from completing it, and stage all changes for review before execution.
 
 ### 6.2 MCP connections
 
 - Provide a settings view to add, inspect, enable, disable, and remove MCP server connections.
-- For the built-in Jarvis server, connect to the local `/mcp` endpoint and use the existing tool contracts.
+- For the built-in Tamanduá server, connect to the local `/mcp` endpoint and use the existing tool contracts.
 - For external servers, support configured MCP transports through a documented adapter; show server identity, transport, available tools, and granted capabilities before enabling.
 - Begin with read-only capabilities for external servers. Require a separate, explicit per-server write grant before offering write tools.
 - Do not infer that a connected MCP server is trusted to access every tool. Allow users to disable individual tools or capability groups.
@@ -122,7 +122,7 @@ Summary content must not hide the underlying tables or charts, and must not be u
 
 ### Functional requirements
 
-- **FR-1 Grounded answers:** The assistant retrieves relevant records using Jarvis API/MCP tools rather than relying on model memory. It reports when evidence is incomplete.
+- **FR-1 Grounded answers:** The assistant retrieves relevant records using Tamanduá API/MCP tools rather than relying on model memory. It reports when evidence is incomplete.
 - **FR-2 Currency integrity:** Never add or compare unlike currencies as one total unless an explicit conversion and rate date are shown. Default summaries retain per-currency totals.
 - **FR-3 Read/write separation:** Read tools may run to answer a question. Any operation that creates, updates, or deletes finance data must be previewed and separately confirmed by the user.
 - **FR-4 Import review (phase two):** Every file import produces a structured, editable draft and a result receipt. No direct document-to-database writes.
@@ -166,13 +166,13 @@ The measured production bundle is 258.05 kB gzip for the lazy CopilotKit chat/ru
 ### Phase one: chat and summaries
 
 1. Settings for an OpenAI-compatible model endpoint (base URL, token, model identifier), with encrypted local persistence and a test-connection action.
-2. In-app chat with Jarvis read tools and source-backed answers.
-3. Local Jarvis MCP connection managed by the app.
+2. In-app chat with Tamanduá read tools and source-backed answers.
+3. Local Tamanduá MCP connection managed by the app.
 4. Locally persisted chat history and deletion controls.
 5. AI summaries for Overview and Cash flow, generated on demand and cached locally with a visible refresh timestamp and stale-data indication.
-6. Read-only use of existing Jarvis MCP tools in chat.
+6. Read-only use of existing Tamanduá MCP tools in chat.
 
-Phase one does not include document uploads, data imports, or writes to Jarvis financial records through the assistant.
+Phase one does not include document uploads, data imports, or writes to Tamanduá financial records through the assistant.
 
 ### Phase two: document upload and import
 
@@ -193,7 +193,7 @@ Phase one does not include document uploads, data imports, or writes to Jarvis f
 - Users can answer common portfolio/cash-flow questions with source records and clear currency/date context.
 - Chat answers common portfolio/cash-flow questions with source records and clear currency/date context.
 - Cached summaries show their freshness and can be refreshed on demand.
-- Phase one chat does not write to Jarvis financial records. Any phase-two finance write follows a visible preview and explicit confirmation.
+- Phase one chat does not write to Tamanduá financial records. Any phase-two finance write follows a visible preview and explicit confirmation.
 - Phase two success includes reliable statement review, duplicate resolution, and price updates that never silently overwrite provider-sourced records.
 - Users can determine what data leaves the machine and remove chat history; phase two adds upload deletion controls.
 

@@ -8,4 +8,4 @@ dist/
 
 # Personal facts for the Hermes skill (accounts, merchants, family names). The skill's
 # method lives in the tracked SKILL.md; this file stays on this machine only.
-.hermes/skills/jarvis-finance/references/import-profile.md
+.hermes/skills/tamandua/references/import-profile.md

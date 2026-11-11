@@ -9,7 +9,7 @@ const { openDatabase } = require('../src/db');
 
 // Boots the real app against a throwaway database (same harness shape as api.test.js).
 async function startServer() {
-  const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'jarvis-finance-cashflow-test-'));
+  const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'tamandua-cashflow-test-'));
   const { app, db } = createApp({ dataDir });
   const server = await new Promise((resolve) => {
     const instance = app.listen(0, '127.0.0.1', () => resolve(instance));
@@ -44,7 +44,7 @@ async function categoriesOf(request) {
 }
 
 test('default cash-flow categories are seeded only while the table is empty', async (t) => {
-  const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'jarvis-finance-cashflow-seed-'));
+  const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'tamandua-cashflow-seed-'));
   t.after(() => fs.rmSync(dataDir, { recursive: true, force: true }));
   let db = openDatabase(dataDir);
   const seeded = db.prepare('SELECT * FROM cash_flow_categories').all();
@@ -185,7 +185,7 @@ test('full backup carries cash flow, and older backups without it still restore'
 });
 
 test('databases with the old separate cash-flow accounts are unified on open', () => {
-  const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'jarvis-finance-cashflow-unify-'));
+  const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'tamandua-cashflow-unify-'));
   try {
     // Build the pre-unification shape by hand: cash_flow_accounts + entries referencing it.
     const raw = new Database(path.join(dataDir, 'portfolio.sqlite'));

@@ -1,4 +1,4 @@
-// The LangChain agent: model client + Jarvis MCP read tools + the read-only guard.
+// The LangChain agent: model client + Tamanduá MCP read tools + the read-only guard.
 //
 // `stream()` with `streamMode: 'messages'` yields `[messageChunk, meta]` pairs (verified
 // against a local fake endpoint): model text arrives from the `model_request` node as
@@ -55,7 +55,7 @@ function createAssistant({ store, connection, history }) {
 
     const status = await connection.status();
     if (!status.enabled || !status.connected) {
-      const failure = status.error || `The local Jarvis MCP endpoint at ${status.url} is not reachable.`;
+      const failure = status.error || `The local Tamanduá MCP endpoint at ${status.url} is not reachable.`;
       const message2 = `I could not read your records, so I will not guess at numbers. ${failure} Open Settings & backup → Assistant and turn the connection on or use Reconnect.`;
       const saved = history.addMessage({ conversationId: chatId, role: 'assistant', content: '', model: model.model, error: message2 });
       yield { type: 'error', code: ERROR_CODES.mcpUnreachable, message: message2, messageId: saved.id, conversationId: chatId };
@@ -69,7 +69,7 @@ function createAssistant({ store, connection, history }) {
       tools = [];
     }
     if (!tools.length) {
-      yield { type: 'notice', message: 'Every Jarvis tool is switched off in Settings, so I have no access to your records and cannot state any figures. Re-enable at least one tool to get grounded answers.' };
+      yield { type: 'notice', message: 'Every Tamanduá tool is switched off in Settings, so I have no access to your records and cannot state any figures. Re-enable at least one tool to get grounded answers.' };
     }
 
     // Per-message activity: the guard records as it runs, and the same array is what the UI

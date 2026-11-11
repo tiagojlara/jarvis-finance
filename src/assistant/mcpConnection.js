@@ -1,4 +1,4 @@
-// The app-managed connection from the assistant to Jarvis' own MCP endpoint (§10 item 3).
+// The app-managed connection from the assistant to Tamanduá's own MCP endpoint (§10 item 3).
 //
 // §13 is explicit that these are two separate capabilities: the /mcp server keeps its own
 // descriptions and safety semantics for external agents like Hermes, and here the app is
@@ -12,10 +12,10 @@
 const { MultiServerMCPClient } = require('@langchain/mcp-adapters');
 const { isReadOnlyTool, bareToolName } = require('./readOnlyGuard');
 
-const SERVER_KEY = 'jarvis';
+const SERVER_KEY = 'tamandua';
 
 function defaultMcpUrl() {
-  if (process.env.JARVIS_MCP_URL) return process.env.JARVIS_MCP_URL;
+  if (process.env.TAMANDUA_MCP_URL) return process.env.TAMANDUA_MCP_URL;
   const port = Number(process.env.PORT || 3000);
   return `http://127.0.0.1:${port}/mcp`;
 }
@@ -55,7 +55,7 @@ function createMcpConnection({ url, store } = {}) {
         await disconnect().catch(() => {});
         lastError = error?.message || String(error);
         checkedAt = new Date().toISOString();
-        throw new Error(`The app could not reach its own Jarvis MCP endpoint at ${endpoint}. ${lastError}`);
+        throw new Error(`The app could not reach its own Tamanduá MCP endpoint at ${endpoint}. ${lastError}`);
       } finally {
         pending = null;
       }
@@ -97,7 +97,7 @@ function createMcpConnection({ url, store } = {}) {
       enabled: state.enabled,
       connected: Boolean(loaded),
       checkedAt,
-      error: state.enabled ? error : 'The built-in Jarvis connection is turned off.',
+      error: state.enabled ? error : 'The built-in Tamanduá connection is turned off.',
       tools: inventory,
       exposed: inventory.filter((tool) => tool.readOnly && tool.enabled).length,
     };

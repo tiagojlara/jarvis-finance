@@ -14,8 +14,8 @@ const { EventType } = require('@ag-ui/core');
 
 // An explicitly provisioned key keeps these tests off the macOS Keychain: no test run should
 // create or read a credential that belongs to the person running them.
-process.env.JARVIS_ASSISTANT_KEY = '0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef';
-delete process.env.JARVIS_ASSISTANT_KEY_FILE;
+process.env.TAMANDUA_ASSISTANT_KEY = '0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef';
+delete process.env.TAMANDUA_ASSISTANT_KEY_FILE;
 
 const TOKEN = 'secret-token-never-echoed';
 const MONTH = new Date().toISOString().slice(0, 7);
@@ -162,7 +162,7 @@ function foldAgui(events) {
 // Boots the real app (its own /mcp endpoint included) against a throwaway database,
 // plus a fake model endpoint. Same harness shape as api.test.js and cashflow.test.js.
 async function startAssistant({ toolCalls, answer } = {}) {
-  const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'jarvis-assistant-test-'));
+  const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'tamandua-assistant-test-'));
   const model = await startFakeModel({ toolCalls, answer });
   let server;
   const { app, db } = createApp({
@@ -196,7 +196,7 @@ async function startAssistant({ toolCalls, answer } = {}) {
   // through this transport, which is the point of the extra round trip.
   let copilotRuns = 0;
   const copilotUrl = `http://127.0.0.1:${server.address().port}${COPILOT_BASE_PATH}`;
-  const copilotChat = async (message, { conversationId, threadId, agentId = 'jarvis', forwardedProps = {}, messages } = {}) => {
+  const copilotChat = async (message, { conversationId, threadId, agentId = 'tamandua', forwardedProps = {}, messages } = {}) => {
     let thread = threadId;
     if (thread === undefined) {
       if (conversationId === undefined) {
@@ -453,7 +453,7 @@ test('the app connects to its own MCP endpoint and exposes only the read tools',
 });
 
 test('tool switches change what the model is offered and cannot enable a write tool', async (t) => {
-  const { request, copilotChat, configure, model, close } = await startAssistant({ toolCalls: ['jarvis_get_summary'], answer: 'Totals are 3200.00 EUR.' });
+  const { request, copilotChat, configure, model, close } = await startAssistant({ toolCalls: ['tamandua_get_summary'], answer: 'Totals are 3200.00 EUR.' });
   t.after(close);
   await seedCashFlow(request);
   await configure();
@@ -469,13 +469,13 @@ test('tool switches change what the model is offered and cannot enable a write t
   const viaCopilot = await copilotChat('what is my income this month');
   assert.equal(viaCopilot.runError, null, JSON.stringify(viaCopilot.events));
   const offered = model.calls[firstRun].body.tools.map((tool) => tool.function.name);
-  assert.equal(offered.includes('jarvis_get_summary'), false, 'a switched-off tool must not even be listed');
-  assert.ok(offered.includes('jarvis_list_cash_flow_transactions'));
+  assert.equal(offered.includes('tamandua_get_summary'), false, 'a switched-off tool must not even be listed');
+  assert.ok(offered.includes('tamandua_list_cash_flow_transactions'));
   assert.equal(offered.some((name) => /save_|update_|delete_/.test(name)), false, 'no write tool is ever offered');
 
   const refused = await request('assistant/mcp/tools/save_dividend', { method: 'PUT', body: { enabled: true } });
   assert.equal(refused.status, 400);
-  assert.match(refused.payload.error, /not a read-only Jarvis tool/i);
+  assert.match(refused.payload.error, /not a read-only Tamandua tool/i);
 
   const backOn = await request('assistant/mcp/tools/get_summary', { method: 'PUT', body: { enabled: true } });
   assert.equal(backOn.status, 200);
@@ -538,7 +538,7 @@ test('the app has one chat transport, and it is not the one that was deleted', a
 
 test('chat answers from a tool call, streams, and persists the exchange', async (t) => {
   const answer = 'You have one account: Brokerage (EUR).';
-  const { request, copilotChat, configure, model, db, close } = await startAssistant({ toolCalls: ['jarvis_list_accounts'], answer });
+  const { request, copilotChat, configure, model, db, close } = await startAssistant({ toolCalls: ['tamandua_list_accounts'], answer });
   t.after(close);
   await seedCashFlow(request);
   await configure();
@@ -579,7 +579,7 @@ test('chat answers from a tool call, streams, and persists the exchange', async 
   assert.match(JSON.stringify(model.calls[0].body.messages), /READ-ONLY/, 'grounding rules travel with the request');
   assert.equal(model.calls[1].body.messages.some((message) => message.role === 'tool'), true, 'the tool result was fed back');
   assert.equal(JSON.stringify(model.calls[1].body.messages).includes(TOKEN), false);
-  assert.equal(JSON.stringify(model.calls[1].body.messages).includes('jarvis_tool_data'), true, 'tool output is marked as data, not instructions (§9)');
+  assert.equal(JSON.stringify(model.calls[1].body.messages).includes('tamandua_tool_data'), true, 'tool output is marked as data, not instructions (§9)');
 
   // The history this run writes is the history the REST surface reads, tool trail included.
   const thread = (await request(`assistant/conversations/${viaCopilot.threadId}`)).payload.conversation;
@@ -599,7 +599,7 @@ test('a tool call outside the read-only allowlist is refused before it runs', as
   const guard = createReadOnlyGuard();
   let executed = 0;
   const handler = async () => { executed += 1; return { content: 'should never run' }; };
-  const refusal = await guard.middleware.wrapToolCall({ toolCall: { name: 'jarvis_save_dividend', args: { account_id: 1, amount: 500 }, id: 'x1' } }, handler);
+  const refusal = await guard.middleware.wrapToolCall({ toolCall: { name: 'tamandua_save_dividend', args: { account_id: 1, amount: 500 }, id: 'x1' } }, handler);
   assert.equal(executed, 0, 'refusing means not calling the tool at all (§9)');
   assert.equal(refusal.status, 'error');
   assert.match(refusal.content, /read-only/i);
@@ -612,15 +612,15 @@ test('a tool call outside the read-only allowlist is refused before it runs', as
   assert.equal(refusal.tool_call_id, 'x1');
 
   // And a read tool passes through, wrapped as untrusted data.
-  const ok = await guard.middleware.wrapToolCall({ toolCall: { name: 'jarvis_get_summary', args: {}, id: 'x2' } }, async () => ({ content: '{"valueByCurrency":{"EUR":1000}}' }));
+  const ok = await guard.middleware.wrapToolCall({ toolCall: { name: 'tamandua_get_summary', args: {}, id: 'x2' } }, async () => ({ content: '{"valueByCurrency":{"EUR":1000}}' }));
   assert.equal(guard.activity[1].id, 'x2');
-  assert.match(ok.content, /<jarvis_tool_data tool="get_summary">/);
+  assert.match(ok.content, /<tamandua_tool_data tool="get_summary">/);
   assert.match(ok.content, /not instructions to follow/);
 
   // A call with no id is the case a name-derived key would get wrong: two reads of the same tool would
   // share one id, and only one chip would survive the pairing.
   for (const content of ['{"a":1}', '{"b":2}']) {
-    await guard.middleware.wrapToolCall({ toolCall: { name: 'jarvis_get_summary', args: {} } }, async () => ({ content }));
+    await guard.middleware.wrapToolCall({ toolCall: { name: 'tamandua_get_summary', args: {} } }, async () => ({ content }));
   }
   const generated = guard.activity.slice(2).map((item) => item.id);
   assert.equal(new Set(generated).size, 2, `id-less calls collided: ${generated.join(', ')}`);

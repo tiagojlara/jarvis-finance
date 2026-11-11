@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { assistantApi, stamp } from '../api.js';
 
-// Model endpoint, local Jarvis MCP connection and assistant data controls.
+// Model endpoint, local Tamandua MCP connection and assistant data controls.
 //
 // Two rules shape this form. The token is write-only: the server never sends it back, so the UI
 // can only say that one is saved, replace it, or clear it. And every model request is proxied by
@@ -188,12 +188,12 @@ export default function AssistantSettings() {
     <p className="panel-note assistant-key-source"><b>Encryption key</b><br/>{keySource?.error ? `Not available: ${keySource.error}` : `Held outside the database — ${keySource?.label || 'resolving…'}. The token is stored as AES-256-GCM ciphertext in its own settings record, which /api/settings and the backup file do not include.`}</p>
 
     <div className="divider"/>
-    <h3 className="subheading">Local Jarvis connection</h3>
+    <h3 className="subheading">Local Tamanduá connection</h3>
     <p className="panel-note">The app connects to its own <code>{mcp?.url || '/mcp'}</code> endpoint as an MCP client. This is separate from exposing <code>/mcp</code> to external agents: those keep the descriptions and safety semantics the server publishes.{mcp?.checkedAt ? ` Checked ${stamp(mcp.checkedAt)}.` : ''}</p>
     <div className="assistant-mcp-status">
       <span className={`tag ${mcp?.connected ? '' : 'tag-warn'}`}>{mcp?.enabled ? (mcp?.connected ? `● Connected · ${mcp.exposed} read tool${mcp.exposed === 1 ? '' : 's'} offered` : '○ Not connected') : '○ Turned off'}</span>
       <button type="button" className="button button-quiet" onClick={reconnect} disabled={Boolean(busy)}>{busy === 'reconnect' ? 'Reconnecting…' : 'Reconnect'}</button>
-      <label className="assistant-check"><input type="checkbox" checked={Boolean(mcp?.enabled)} disabled={Boolean(busy)} onChange={(e) => setMcpEnabled(e.target.checked)}/><span>Let the assistant read Jarvis records</span></label>
+      <label className="assistant-check"><input type="checkbox" checked={Boolean(mcp?.enabled)} disabled={Boolean(busy)} onChange={(e) => setMcpEnabled(e.target.checked)}/><span>Let the assistant read Tamanduá records</span></label>
     </div>
     {mcp?.error && <p className="form-error">{mcp.error}</p>}
     <div className="assistant-tool-list">

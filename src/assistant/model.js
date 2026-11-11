@@ -15,7 +15,7 @@
 
 const { ChatOpenAI } = require('@langchain/openai');
 
-const CHAT_TIMEOUT_MS = Number(process.env.JARVIS_ASSISTANT_TIMEOUT_MS || 120000);
+const CHAT_TIMEOUT_MS = Number(process.env.TAMANDUA_ASSISTANT_TIMEOUT_MS || process.env.JARVIS_ASSISTANT_TIMEOUT_MS || 120000);
 const TEST_TIMEOUT_MS = 20000;
 const MAX_ERROR_LENGTH = 400;
 
@@ -42,7 +42,7 @@ function sanitizeError(error, { token, model, baseUrl, timeoutMs } = {}) {
 
   if (/ECONNREFUSED/i.test(raw)) return `Nothing is listening at ${host}. Start the model server, or fix the base URL in Settings & backup → Model endpoint.`;
   if (/ENOTFOUND|EAI_AGAIN/i.test(raw)) return `The host in ${host} could not be resolved. Check the endpoint URL and your network.`;
-  if (/ETIMEDOUT|timed out|timeout|abort/i.test(raw)) return `The endpoint did not answer within ${Math.round((error?.timeoutMs || timeoutMs || CHAT_TIMEOUT_MS) / 1000)}s. A local model that is still loading can cause this — try again, or raise the timeout by starting the app with JARVIS_ASSISTANT_TIMEOUT_MS.`;
+  if (/ETIMEDOUT|timed out|timeout|abort/i.test(raw)) return `The endpoint did not answer within ${Math.round((error?.timeoutMs || timeoutMs || CHAT_TIMEOUT_MS) / 1000)}s. A local model that is still loading can cause this — try again, or raise the timeout by starting the app with TAMANDUA_ASSISTANT_TIMEOUT_MS.`;
   if (status === 401 || status === 403) return `The endpoint rejected the token (${status}). Re-enter the API token in Settings & backup → Model endpoint; some local servers expect a placeholder value here rather than a real key.`;
   if (status === 404) return `The endpoint has no model "${named}" at this path (404). Check the model identifier, and make sure the base URL points at the API root, for example https://host/v1.`;
   if (status === 429) return 'The endpoint is rate limited (429). Wait a moment and try again.';

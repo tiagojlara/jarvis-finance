@@ -2,9 +2,9 @@ import { useCallback, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { CopilotChat, CopilotKitProvider, useAgent, useRenderTool } from '@copilotkit/react-core/v2';
 import '@copilotkit/react-core/v2/styles.css';
-import { useJarvis } from '../jarvisState.jsx';
-import { historyToMessages, readToolResult } from '../jarvisMessages.mjs';
-import { JARVIS_CODES } from '../jarvisCodes.mjs';
+import { useTamandua } from '../tamanduaState.jsx';
+import { historyToMessages, readToolResult } from '../tamanduaMessages.mjs';
+import { TAMANDUA_CODES } from '../tamanduaCodes.mjs';
 
 // The CopilotKit half of the assistant, and the only module in the client that imports the library.
 //
@@ -13,18 +13,18 @@ import { JARVIS_CODES } from '../jarvisCodes.mjs';
 // the transcript the AG-UI stream produces and routes the typed failure codes back to the right surface
 // (Settings, the disclosure, or a plain message).
 //
-// Loaded lazily, by jarvisState.jsx, on the first press of the launcher or a visit to /assistant. Measured
+// Loaded lazily, by tamanduaState.jsx, on the first press of the launcher or a visit to /assistant. Measured
 // with `npm run build`: this module's import graph is a 258 kB gzipped chunk that nothing else needs, and
 // the entry bundle is unchanged at 96 kB. A holdings table has no business waiting on either.
 
-const AGENT_ID = 'jarvis';
+const AGENT_ID = 'tamandua';
 
 // The library's composer, labelled in our words. `chatDisclaimerText` is the §9 line the hand-rolled
 // composer used to print under the input, and `welcomeMessageText` is the empty state; both are strings
 // the person reads before anything leaves the machine, so they belong here rather than in a stylesheet.
 const LABELS = {
   chatInputPlaceholder: 'Ask about your records — Enter sends, Shift+Enter adds a line',
-  welcomeMessageText: 'Read-only answers, from your own records. Jarvis looks them up through this app’s local tools and quotes what it finds, per currency.',
+  welcomeMessageText: 'Read-only answers, from your own records. Tamanduá looks them up through this app’s local tools and quotes what it finds, per currency.',
   chatDisclaimerText: '',
 };
 
@@ -43,7 +43,7 @@ function ToolChip({ name, args, status, result }) {
   const shown = STATUS_LABELS[info.status] ? info.status : settled ? 'ok' : 'pending';
   let argText = '';
   try { argText = args && Object.keys(args).length ? JSON.stringify(args) : ''; } catch { argText = ''; }
-  return <div className={`jarvis-tool tool-${shown}`}>
+  return <div className={`tamandua-tool tool-${shown}`}>
     <code>{name}</code>
     <span className={`tag ${shown === 'ok' ? '' : shown === 'refused' ? 'tag-warn' : 'tag-bad'}`}>{label}</span>
     {info.ms ? <span className="tool-ms">{info.ms} ms</span> : null}
@@ -52,7 +52,7 @@ function ToolChip({ name, args, status, result }) {
   </div>;
 }
 
-export default function JarvisChat() {
+export default function TamanduaChat() {
   return <CopilotKitProvider
     runtimeUrl="/api/copilotkit"
     agentId={AGENT_ID}
@@ -62,13 +62,13 @@ export default function JarvisChat() {
     enableInspector={false}
     showIntelligenceIndicator={false}
   >
-    <JarvisPanel/>
+    <TamanduaPanel/>
   </CopilotKitProvider>;
 }
 
-function JarvisPanel() {
-  const jarvis = useJarvis();
-  const { threadId, rows, historyToken, settings, chatError, open, page, slot } = jarvis;
+function TamanduaPanel() {
+  const tamandua = useTamandua();
+  const { threadId, rows, historyToken, settings, chatError, open, page, slot } = tamandua;
   const panelRef = useRef(null);
   const expanded = page === 'assistant';
   // The same agent instance CopilotChat runs against — `useAgent` reads the registry, not a copy, so
@@ -77,11 +77,11 @@ function JarvisPanel() {
 
   useRenderTool({ name: '*', group: true, render: ToolChip }, []);
 
-  // The bundle is here; anything the page was showing as "Loading Jarvis…" can stop. Mounted once and
+  // The bundle is here; anything the page was showing as "Loading Tamandua…" can stop. Mounted once and
   // kept mounted while the app runs, which is also what keeps the transcript alive across page changes.
   useEffect(() => {
-    jarvis.setChatReady(true);
-    return () => jarvis.setChatReady(false);
+    tamandua.setChatReady(true);
+    return () => tamandua.setChatReady(false);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -110,10 +110,10 @@ function JarvisPanel() {
   // Escape closes the floating panel. On /assistant there is nothing to close.
   useEffect(() => {
     if (!open || expanded) return undefined;
-    const onKey = (event) => { if (event.key === 'Escape') jarvis.closePanel(); };
+    const onKey = (event) => { if (event.key === 'Escape') tamandua.closePanel(); };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [open, expanded, jarvis]);
+  }, [open, expanded, tamandua]);
 
   // The typed codes the server yields (`src/assistant/errors.js`), not a regex over the message: FR-9 wants
   // a failure to say what to do, and "open Settings" is a different action from "read the disclosure".
@@ -128,47 +128,47 @@ function JarvisPanel() {
   const handleError = useCallback((event) => {
     const payload = event?.error?.payload;
     const code = event?.context?.runtimeErrorCode || payload?.code || event?.error?.code || '';
-    if (code === JARVIS_CODES.runStopped) {
+    if (code === TAMANDUA_CODES.runStopped) {
       // Not a failure: the person pressed Stop. The partial answer is already on screen and already
       // persisted server-side, so there is nothing to report and nothing to retry.
       return;
     }
-    if (code === JARVIS_CODES.disclosureRequired) { jarvis.ensureDisclosure(payload?.disclosure); return; }
-    if (code === JARVIS_CODES.modelNotConfigured) { jarvis.loadSettings(); jarvis.setChatError(event?.error?.message || 'No model endpoint is configured yet.'); return; }
-    if (code === JARVIS_CODES.threadRequired || code === JARVIS_CODES.threadUnknown) {
+    if (code === TAMANDUA_CODES.disclosureRequired) { tamandua.ensureDisclosure(payload?.disclosure); return; }
+    if (code === TAMANDUA_CODES.modelNotConfigured) { tamandua.loadSettings(); tamandua.setChatError(event?.error?.message || 'No model endpoint is configured yet.'); return; }
+    if (code === TAMANDUA_CODES.threadRequired || code === TAMANDUA_CODES.threadUnknown) {
       // The conversation this tab is writing to no longer exists — deleted from the other surface, or a
       // thread id the library invented before ours landed. Make a real one and say so plainly.
-      jarvis.ensureThread().catch(() => {});
-      jarvis.setChatError('This conversation was removed. Send again to start a new one.');
+      tamandua.ensureThread().catch(() => {});
+      tamandua.setChatError('This conversation was removed. Send again to start a new one.');
       return;
     }
     // `payload.error` first: for an HTTP refusal the message AG-UI builds is `HTTP 428: {"error":…}` —
     // the sentence the server wrote is the one to show, not the wire dump around it.
-    jarvis.setChatError(payload?.error || event?.error?.message || 'Jarvis could not answer.');
-  }, [jarvis]);
+    tamandua.setChatError(payload?.error || event?.error?.message || 'Tamanduá could not answer.');
+  }, [tamandua]);
 
   if (!open && !expanded) return null;
 
   const ready = Boolean(settings?.ready);
   const body = <>
-    {!expanded && <div className="jarvis-panel-head">
-      <div className="jarvis-panel-title"><b>Ask Jarvis</b><span>Portfolio answers grounded in your records</span></div>
-      <span className="jarvis-panel-actions">
-        <button type="button" className="table-action" onClick={() => jarvis.startNewChat()}>New chat</button>
-        <button type="button" className="icon-button" onClick={jarvis.closePanel} aria-label="Close Ask Jarvis">×</button>
+    {!expanded && <div className="tamandua-panel-head">
+      <div className="tamandua-panel-title"><b>Ask Tamanduá</b><span>Portfolio answers grounded in your records</span></div>
+      <span className="tamandua-panel-actions">
+        <button type="button" className="table-action" onClick={() => tamandua.startNewChat()}>New chat</button>
+        <button type="button" className="icon-button" onClick={tamandua.closePanel} aria-label="Close Ask Tamanduá">×</button>
       </span>
     </div>}
-    {!ready && settings && <p className="jarvis-gate">
-      No model endpoint is configured, so Jarvis answers nothing — a guessed number is worse than none.
-      {jarvis.navigate && <button type="button" className="text-action" onClick={() => jarvis.navigate('settings')}>Open settings</button>}
+    {!ready && settings && <p className="tamandua-gate">
+      No model endpoint is configured, so Tamanduá answers nothing — a guessed number is worse than none.
+      {tamandua.navigate && <button type="button" className="text-action" onClick={() => tamandua.navigate('settings')}>Open settings</button>}
     </p>}
     {chatError && <p className="form-error chat-error" role="alert">{chatError}</p>}
-    <div className="jarvis-chat">
+    <div className="tamandua-chat">
       <CopilotChat
         agentId={AGENT_ID}
         // `threadId === String(conversation.id)` (§B). Never null: the provider creates the conversation
         // when the surface opens, and an invented library id would be refused server-side as
-        // `jarvis_thread_unknown` rather than silently writing somewhere we do not own.
+        // `tamandua_thread_unknown` rather than silently writing somewhere we do not own.
         threadId={threadId || undefined}
         labels={LABELS}
         onError={handleError}
@@ -182,8 +182,8 @@ function JarvisPanel() {
   // One chat instance, two placements: the full page hands us a node to render into, and navigating back
   // to it moves the same conversation rather than remounting it.
   if (expanded) {
-    return slot ? createPortal(<div className="jarvis-panel jarvis-inpage">{body}</div>, slot)
-      : <div className="chat-empty"><b>Loading Jarvis…</b></div>;
+    return slot ? createPortal(<div className="tamandua-panel tamandua-inpage">{body}</div>, slot)
+      : <div className="chat-empty"><b>Loading Tamanduá…</b></div>;
   }
-  return <div className="jarvis-panel jarvis-floating" role="dialog" aria-label="Ask Jarvis" ref={panelRef} tabIndex={-1}>{body}</div>;
+  return <div className="tamandua-panel tamandua-floating" role="dialog" aria-label="Ask Tamanduá" ref={panelRef} tabIndex={-1}>{body}</div>;
 }

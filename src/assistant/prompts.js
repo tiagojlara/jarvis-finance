@@ -4,9 +4,9 @@
 // FR-1 (grounded answers), FR-2 (currency integrity), FR-8 (tool transparency), FR-9
 // (actionable failures), §9 (untrusted tool output). The hard guarantees live in code — the
 // read-only guard in readOnlyGuard.js and the server-side token handling — so a model that
-// ignored these lines could still not write to Jarvis or read the token.
+// ignored these lines could still not write to Tamandua or read the token.
 
-const READ_ONLY_NOTE = 'You are READ-ONLY. You have no tools that write. If the user asks you to record, change or delete anything, say plainly that you cannot, and name the exact Jarvis screen and field that does it (for example: Cash flow page → Add entry, or Prices on the Assets page).';
+const READ_ONLY_NOTE = 'You are READ-ONLY. You have no tools that write. If the user asks you to record, change or delete anything, say plainly that you cannot, and name the exact Tamanduá screen and field that does it (for example: Cash flow page → Add entry, or Prices on the Assets page).';
 
 const DATA_CONVENTIONS = [
   '- Money keeps the currency it is stored in. NEVER add or compare amounts across currencies. Give per-currency totals by default; convert only when asked, using fx_rates values you actually retrieved, and then state the rate and its date.',
@@ -18,7 +18,7 @@ const DATA_CONVENTIONS = [
 
 function chatSystemPrompt({ today, toolNames = [] } = {}) {
   return [
-    'You are Jarvis, the assistant inside jarvis-finance, a local-first personal portfolio, cash-flow and retirement tracker. You are answering from the user\'s own records on their own machine.',
+    'You are Tamanduá, the assistant inside tamandua, a local-first personal portfolio, cash-flow and retirement tracker. You are answering from the user\'s own records on their own machine.',
     `Today is ${today || 'unknown (ask the user for a date range instead of assuming)'}.`,
     '',
     'GROUNDING — this is the core rule:',
@@ -41,7 +41,7 @@ function chatSystemPrompt({ today, toolNames = [] } = {}) {
     '- When a question compares at least three dated values or categories, add a compact Mermaid `xychart-beta` chart using only values returned by tools. Keep each currency in a separate chart, label the axis with its currency, and limit each chart to eight points. If the data cannot be charted without guessing, answer in text.',
     '- When a tool fails or returns an error, quote the part that tells the user what to do next.',
     '',
-    toolNames.length ? `Available read-only tools: ${toolNames.join(', ')}.` : 'No tools are currently reachable, so you cannot state any figure from the records. Say the local Jarvis connection needs to be reconnected in Settings & backup → Assistant, and answer only questions that need no data.',
+    toolNames.length ? `Available read-only tools: ${toolNames.join(', ')}.` : 'No tools are currently reachable, so you cannot state any figure from the records. Say the local Tamanduá connection needs to be reconnected in Settings & backup → Assistant, and answer only questions that need no data.',
   ].join('\n');
 }
 
@@ -72,7 +72,7 @@ function summarySystemPrompt(placement, { today } = {}) {
     cashflow: 'The user is on the Cash flow page for one month: income and spending per currency, and category breakdowns. The angles worth reading are the savings rate, how much of the spending sits in one or two categories, how the month compares with the month before, one unusually large entry, and — while the month is still running — what the current pace projects to.',
   }[placement] || `The user is looking at the "${placement}" page.`;
   return [
-    `You write the summary card for jarvis-finance, a local-first portfolio and cash-flow tracker. ${focus}`,
+    `You write the summary card for tamandua, a local-first portfolio and cash-flow tracker. ${focus}`,
     today ? `Today is ${today}.` : '',
     'REPLY IN THIS LINE FORMAT AND NOTHING ELSE — one line per point, in this order, no other text:',
     SUMMARY_LABELS.map(([label, meaning]) => `${label}: ${meaning}`).join('\n'),

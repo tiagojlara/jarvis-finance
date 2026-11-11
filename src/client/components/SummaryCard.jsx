@@ -48,7 +48,7 @@ function Points({ points }) {
   </ul>;
 }
 
-export default function SummaryCard({ placement, period = '', revision = 0, navigate, title = 'Jarvis summary' }) {
+export default function SummaryCard({ placement, period = '', revision = 0, navigate, title = 'Tamanduá summary' }) {
   const [card, setCard] = useState(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');

@@ -2,7 +2,7 @@
 
 Read this when the user hands over a bank transaction CSV in the Nordic retail-bank shape
 described below. Which of his banks exports in this format is in `references/import-profile.md` —
-as is the rest of the personal half: which bank account is which jarvis account, which rows he
+as is the rest of the personal half: which bank account is which tamandua account, which rows he
 wants skipped, how incoming transfers get booked as income, and every merchant→category pair
 already confirmed. Neither institution names nor personal facts belong in this file or `SKILL.md`;
 both are tracked in git, the profile is not.
@@ -21,7 +21,7 @@ both are tracked in git, the profile is not.
 - **Payments onto a card** — that spending comes in with the card statement
   (`references/import-card-statement-pdf.md`); booking the payment too counts it twice. Which
   BG/OCR numbers identify them is in the profile file.
-- **Outgoing own-account transfers** — jarvis models each account's balance separately, so an
+- **Outgoing own-account transfers** — tamandua models each account's balance separately, so an
   internal move is not income or spending.
 - Incoming transfers **are** income on this install, but which ones and under which category is
   the user's rule — take it from the profile file, and ask if it doesn't cover a pattern.

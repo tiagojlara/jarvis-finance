@@ -2,7 +2,7 @@
 
 Read this when the user provides a `transactions-and-notes-export.csv`-style export from a
 **Swedish online broker** — the Swedish column labels below are that export family's, not
-universal. Personal facts live in `references/import-profile.md` and not here: which jarvis
+universal. Personal facts live in `references/import-profile.md` and not here: which tamandua
 account is the brokerage, the broker's name, the exact `notes` strings his already-imported rows
 use, which assets are foreign-domiciled funds, a holding's payout cadence. This file is tracked
 in git, the profile is not.

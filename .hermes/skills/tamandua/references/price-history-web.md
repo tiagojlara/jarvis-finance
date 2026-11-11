@@ -35,7 +35,7 @@ One tool call per row wastes the turn. POST JSON-RPC straight to
 
 1. `initialize` → read the `Mcp-Session-Id` **response header**.
 2. `notifications/initialized` with that session id.
-3. `tools/call` — tool names are **un-namespaced** here (`save_price`, not `jarvis__save_price`),
+3. `tools/call` — tool names are **un-namespaced** here (`save_price`, not `tamandua__save_price`),
    and `Mcp-Session-Id` goes on every subsequent call.
 4. `Accept: application/json, text/event-stream` is required or the server refuses.
 5. Responses come back as SSE — parse the `data: ` lines.

@@ -59,7 +59,7 @@ function latestUserTurn(messages) {
 // The chat. `store`, `history` and `assistant` are the collaborators createAssistantRouter already
 // builds — the CopilotKit surface gates and answers with exactly the same objects the REST surface does,
 // so the two transports cannot drift into different safety rules.
-async function* runJarvis({ ctx, assistant, history, store }) {
+async function* runTamandua({ ctx, assistant, history, store }) {
   const { threadId, runId } = ctx.input;
 
   // Disclosure first, before anything that could reach a model. The REST chat answers 428 for the same
@@ -78,7 +78,7 @@ async function* runJarvis({ ctx, assistant, history, store }) {
   if (conversationId === null) {
     yield runErrorEvent({
       code: ERROR_CODES.threadRequired,
-      message: 'Jarvis answers inside a saved conversation. Start one and send the question again.',
+      message: 'Tamanduá answers inside a saved conversation. Start one and send the question again.',
     });
     return;
   }
@@ -102,10 +102,10 @@ async function* runJarvis({ ctx, assistant, history, store }) {
 
 // `assistant.run()` is a factory of collaborators, not of agents: the app builds one assistant at startup
 // (it holds the MCP connection) and every request gets its own agent object.
-function createJarvisAgent({ assistant, history, store }) {
+function createTamanduaAgent({ assistant, history, store }) {
   return new BuiltInAgent({
     type: 'custom',
-    factory: (ctx) => runJarvis({ ctx, assistant, history, store }),
+    factory: (ctx) => runTamandua({ ctx, assistant, history, store }),
   });
 }
 
@@ -131,12 +131,12 @@ function createSummaryAgent({ summaries }) {
 // The agents whose runs can put finance records on the wire. `summary` is listed before it exists (§F):
 // a gate that has to be widened when a second record-reading agent is registered is a gate that will be
 // forgotten. `echo` is deliberately absent — it reads nothing and is the transport's own stand-in.
-const RECORD_AGENTS = new Set(['jarvis', 'summary']);
+const RECORD_AGENTS = new Set(['tamandua', 'summary']);
 
 // A run request is refused before the agent is built unless the disclosure has been accepted.
 //
 // This is the *policy* gate, and it is not there for the browser's benefit: the browser is already
-// covered by `runJarvis`, which yields a coded `RUN_ERROR`. This one is what `routes.js:174-177`
+// covered by `runTamandua`, which yields a coded `RUN_ERROR`. This one is what `routes.js:174-177`
 // guarantees today for the legacy SSE route — that a hand-rolled client speaking the wire protocol
 // cannot reach `assistant.run()` without accepting. It sits in `hooks.onBeforeHandler` because that is
 // the one place the request is inspected before the run starts, on both entry points at once: the
@@ -182,4 +182,4 @@ function createPolicyHooks({ store, disclosure, agents = RECORD_AGENTS } = {}) {
   };
 }
 
-module.exports = { createJarvisAgent, createSummaryAgent, createPolicyHooks, runJarvis, latestUserTurn, contentToText, conversationIdFrom, RECORD_AGENTS };
+module.exports = { createTamanduaAgent, createSummaryAgent, createPolicyHooks, runTamandua, latestUserTurn, contentToText, conversationIdFrom, RECORD_AGENTS };

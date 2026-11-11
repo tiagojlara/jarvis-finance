@@ -10,7 +10,7 @@ const today = () => new Date().toISOString().slice(0, 10);
 
 // Boots the real app against a throwaway database with network calls stubbed.
 async function startServer(overrides = {}) {
-  const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'jarvis-finance-api-test-'));
+  const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'tamandua-api-test-'));
   const { app, db } = createApp({ dataDir, ...overrides });
   const server = await new Promise((resolve) => {
     const instance = app.listen(0, '127.0.0.1', () => resolve(instance));
