@@ -166,41 +166,16 @@ function createAssistantRouter({ db, dataDir, mcpUrl, keyOptions = {} } = {}) {
     res.json({ ok: true });
   });
 
-  // ---- chat (§10 item 2), streamed as server-sent events ----------------------------
-  // POST rather than GET so the question is not a URL, and the client reads it with fetch.
-  router.post('/api/assistant/chat', handle(async (req, res) => {
-    const message = String((req.body || {}).message || '');
-    const conversationId = (req.body || {}).conversationId;
-    if (!store.acknowledgement().acknowledgedAt) {
-      // 428 Precondition Required: the disclosure is a precondition of the first request.
-      return res.status(428).json({ error: 'Acknowledge the data disclosure first.', disclosure: { ...DISCLOSURE, ...store.acknowledgement() } });
-    }
-
-    res.setHeader('Content-Type', 'text/event-stream; charset=utf-8');
-    res.setHeader('Cache-Control', 'no-cache, no-transform');
-    res.setHeader('Connection', 'keep-alive');
-    res.setHeader('X-Accel-Buffering', 'no');
-    res.flushHeaders();
-
-    const abort = new AbortController();
-    const send = (event) => res.write(`data: ${JSON.stringify(event)}\n\n`);
-    // A browser tab closing mid-answer is normal; stop feeding the model and let the run end.
-    // On `res`, not `req`: express.json() has already read the body, so the *request* stream
-    // closes here immediately, and aborting on it would cancel every chat before it started.
-    res.on('close', () => {
-      if (!res.writableFinished) abort.abort();
-    });
-
-    try {
-      for await (const event of assistant.run({ conversationId, message, signal: abort.signal })) send(event);
-    } catch (error) {
-      // Run-level failures (no model configured, history gone, oversized message) still have
-      // to reach the UI as a message, not as a broken stream.
-      send({ type: 'error', message: error?.message || 'The assistant could not answer.' });
-    } finally {
-      res.end();
-    }
-  }));
+  // ---- chat (§10 item 2) ------------------------------------------------------------
+  // There is no chat route here any more. The conversation is served by the CopilotKit endpoint
+  // (src/assistant/copilotRuntime.js + copilotAgents.js), which answers AG-UI events on one URL and is
+  // mounted in src/app.js. What stays on this router is everything that is not a stream: the conversation
+  // list, the per-message inspect/delete surface (FR-10), the disclosure, the settings and the cards.
+  //
+  // The one behaviour the deleted route owned that has no REST equivalent is the 428 disclosure refusal;
+  // it moved to `createPolicyHooks`, which gates the single copilot endpoint for the same condition and
+  // the same payload (see copilotAgents.js). `assistant` is still returned below because the copilot
+  // module is built from it in src/app.js.
 
   // ---- AI summary cards (§10 item 5) ------------------------------------------------
   router.get('/api/assistant/summaries', handle(async (req, res) => {

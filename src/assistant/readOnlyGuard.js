@@ -93,9 +93,23 @@ function previewArgs(args) {
 function createReadOnlyGuard({ onActivity } = {}) {
   const activity = [];
   const refusals = [];
+  let sequence = 0;
 
   function record(call, entry) {
-    const item = { tool: bareToolName(call?.name), args: previewArgs(call?.args), ms: 0, ...entry };
+    sequence += 1;
+    const item = {
+      // Every call is identified, because the AG-UI bridge has to pair a TOOL_CALL_START with its
+      // TOOL_CALL_RESULT: an args event naming a toolCallId nothing opened fails the run outright, while a
+      // result with an unmatched id is accepted quietly and simply never renders. LangChain supplies an id
+      // for real calls; the counter is only a fallback that keeps two id-less calls of the same tool
+      // distinct, which a name-derived key would not. Callers may override it through `entry`, which is
+      // spread last — the refusal site does, to carry the same key its ToolMessage gets below.
+      id: call?.id || `activity-${sequence}`,
+      tool: bareToolName(call?.name),
+      args: previewArgs(call?.args),
+      ms: 0,
+      ...entry,
+    };
     activity.push(item);
     if (onActivity) {
       try {
@@ -121,9 +135,12 @@ function createReadOnlyGuard({ onActivity } = {}) {
           ? 'It is not on the read-only allowlist, so it may write.'
           : 'It can change Jarvis records.';
         const message = `Read-only refusal: the assistant cannot call ${bare || '(unnamed tool)'} — ${reason} This assistant only reads; the user makes changes in the Jarvis UI, which applies the same validation.`;
+        // One id for both: the persisted refusal row and the refusal ToolMessage have to name the same
+        // call, or replaying history cannot show which refusal produced which message.
+        const refusalId = call.id || `refused-${bare}`;
         refusals.push({ tool: bare, reason, at: new Date().toISOString() });
-        record(call, { status: 'refused', message: reason });
-        return new ToolMessage({ content: message, tool_call_id: call.id || `refused-${bare}`, name: bare, status: 'error' });
+        record(call, { id: refusalId, status: 'refused', message: reason });
+        return new ToolMessage({ content: message, tool_call_id: refusalId, name: bare, status: 'error' });
       }
 
       const started = Date.now();

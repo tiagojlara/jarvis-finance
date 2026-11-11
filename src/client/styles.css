@@ -160,39 +160,54 @@ button.flow-category-row:hover{background:#f7f8f6}
 .assistant-gate{display:grid;gap:10px;justify-items:start;margin-bottom:13px;padding:12px 13px;border:1px solid #f0d1c5;border-radius:8px;background:#fff6f2;color:#8b4a35;font-size:10px;line-height:1.6}
 .assistant-gate p{margin:0}
 .assistant-gate-warn{border-color:#f0dcc5;background:#fdf7ef;color:#8a6237}
-.chat-log{display:flex;flex:1;flex-direction:column;gap:13px;min-height:220px;padding:2px 2px 8px;overflow-y:auto}
+/* The old hand-rolled transcript (chat-msg/chat-log/chat-composer/tool-activity) is gone with the
+   transport it styled: the message list, the composer and the streaming line are CopilotKit's chat now.
+   What is left here is ours: the empty state, the failure line, and the tool chip our renderer draws. */
 .chat-empty{display:grid;gap:7px;margin:auto 0;padding:26px 12px;text-align:center;color:#8d9a92;font-size:11px;line-height:1.6}
 .chat-empty b{color:var(--ink);font-size:12px}
 .chat-empty span{margin:0 auto;max-width:46ch}
-.chat-msg{display:grid;gap:7px;padding:12px 13px;border:1px solid var(--line);border-radius:10px;background:#fbfcfa}
-.chat-user{border-color:#e6ece6;background:#f6f9f6}
-.chat-assistant{background:var(--surface)}
-.chat-failed{border-color:#f0d1c5;background:#fff8f5}
-.chat-meta{display:flex;align-items:center;gap:9px;color:#93a098;font-size:9px;font-weight:650;letter-spacing:.4px}
-.chat-meta b{color:#5d6f66;font-size:10px}
-.chat-meta time{font-weight:500}
-.chat-meta .text-action{margin-left:auto}
-.chat-body{margin:0;color:#2c3d37;font-size:12px;line-height:1.65;white-space:pre-wrap;overflow-wrap:anywhere}
-.chat-body-muted{color:#93a098}
-.chat-notice{margin:0;padding:8px 10px;border-radius:7px;background:#fdf7ef;color:#8a6237;font-size:10px;line-height:1.55}
 .chat-error{margin:0 0 10px}
-.tool-activity{display:grid;gap:6px;font-size:9px;color:#7e8b83}
-.tool-activity summary{cursor:pointer;color:#5c7b6c;font-weight:650;list-style:none}
-.tool-activity summary::-webkit-details-marker{display:none}
-.tool-activity summary:before{content:"› ";display:inline-block;transition:transform .15s}
-.tool-activity[open] summary:before{content:"⌄ ";}
-.tool-activity-note{margin-left:6px;color:#9aa69f;font-weight:500}
-.tool-activity ul{display:grid;gap:3px;margin:0;padding:0;list-style:none}
-.tool-row{display:flex;flex-wrap:wrap;align-items:center;gap:7px;padding:5px 7px;border-radius:6px;background:#f4f7f4}
-.tool-refused,.tool-error{background:#fdf4f0}
-.tool-row code{padding:2px 5px;border-radius:5px;background:#e8efe9;color:#3d5a4d;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:9px}
 .tool-ms{color:#9aa69f}
 .tool-args{flex:1 1 240px;min-width:0;overflow-wrap:anywhere;background:transparent;color:#8b978f}
-.chat-composer{display:grid;gap:9px;margin-top:12px;padding-top:13px;border-top:1px solid var(--line)}
-.chat-composer textarea{min-height:74px;font:inherit;font-size:12px;line-height:1.55}
-.chat-composer span{display:flex;align-items:center;gap:5px;color:#718078;font-size:10px}
-.chat-composer-actions{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}
-.chat-composer-note{color:#98a49c;font-size:9px;line-height:1.5;max-width:66ch}
+
+/* FR-8 — which tools ran, and that they only read. Drawn by our own tool-call renderer
+   (components/JarvisChat.jsx); registering one is required, not decorative, because 1.85.0 paints nothing
+   for a call no renderer matches. */
+.jarvis-tool{display:flex;flex-wrap:wrap;align-items:center;gap:7px;margin:3px 0;padding:6px 8px;border:1px solid var(--line);border-radius:7px;background:#f4f7f4;font-size:9px;color:#7e8b83}
+.jarvis-tool.tool-refused,.jarvis-tool.tool-error,.jarvis-tool.tool-pending{background:#fdf4f0}
+.jarvis-tool code{padding:2px 5px;border-radius:5px;background:#e8efe9;color:#3d5a4d;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:9px}
+
+/* The launcher icon and the panel it opens.
+   Stacking is a deliberate choice, not a default: the launcher sits above the sidebar (z-10) and the panel
+   just below `.modal-backdrop` (z-30), so the §9 disclosure can never be buried by the chat it exists to
+   interrupt. CopilotKit's own CopilotPopup hardcodes z-1200 on an element inside a shadow root, which no
+   stylesheet in this app can reach — that is why the floating surface is our panel around `CopilotChat`
+   rather than their popup. */
+.jarvis-launcher{position:fixed;z-index:25;right:24px;bottom:24px;display:grid;place-items:center;width:52px;height:52px;border:1px solid #cfe0d4;border-radius:50%;background:var(--green);color:#fff;font-size:20px;box-shadow:0 10px 26px #1e322e26;transition:transform .15s,background .15s}
+.jarvis-launcher:hover{background:#265c4d;transform:translateY(-1px)}
+.jarvis-launcher:focus-visible{outline:2px solid #b2cfbc;outline-offset:3px}
+.jarvis-launcher-dot{position:absolute;top:2px;right:2px;width:11px;height:11px;border:2px solid var(--surface);border-radius:50%;background:var(--orange)}
+.jarvis-panel{display:flex;flex-direction:column;min-width:0;border:1px solid var(--line);border-radius:12px;background:var(--surface);box-shadow:0 20px 60px #1e322e2a}
+.jarvis-floating{position:fixed;z-index:28;right:24px;bottom:24px;width:min(430px,calc(100vw - 32px));height:min(660px,calc(100vh - 48px))}
+.jarvis-floating:focus{outline:none}
+.jarvis-panel-head{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:12px 14px;border-bottom:1px solid var(--line);font-size:12px;letter-spacing:-.12px}
+.jarvis-panel-actions{display:flex;align-items:center;gap:4px}
+.jarvis-chat{display:flex;flex:1;flex-direction:column;min-height:0}
+.jarvis-gate{margin:0;padding:11px 13px;border-bottom:1px solid var(--line);background:#fff6f2;color:#8b4a35;font-size:10px;line-height:1.55}
+/* On /assistant the same panel is placed by the page, so it stops being a floating card. */
+.jarvis-inpage{flex:1;min-height:0;border:0;border-radius:0;background:transparent;box-shadow:none}
+.jarvis-slot{display:flex;flex:1;flex-direction:column;min-height:0}
+.assistant-inspect{display:grid;gap:8px;padding-top:11px;border-top:1px solid var(--line);font-size:10px;color:#718078}
+.assistant-inspect summary{cursor:pointer;color:#4c6b5b;font-weight:650;list-style:none}
+.assistant-inspect summary::-webkit-details-marker{display:none}
+.assistant-inspect summary:before{content:"› ";display:inline-block}
+.assistant-inspect[open] summary:before{content:"⌄ "}
+.assistant-messages{display:grid;gap:4px;margin:0;padding:0;list-style:none}
+.assistant-message-row{display:flex;align-items:flex-start;gap:6px;padding:7px;border-radius:7px;background:#f7faf7}
+.assistant-message-main{display:grid;flex:1;min-width:0;gap:3px;font-size:9px;color:#7e8b83;overflow-wrap:anywhere}
+.assistant-message-main b{color:#5d6f66;font-size:10px}
+.assistant-message-main time{font-weight:500}
+.assistant-message-row .table-action{flex:0 0 auto}
 kbd{padding:1px 5px;border:1px solid var(--line);border-radius:4px;background:#f6f8f6;color:#6c7c73;font-family:inherit;font-size:8px}
 .disclosure-card{max-width:560px}
 .disclosure-card .panel-note{font-size:11px}
@@ -265,4 +280,6 @@ kbd{padding:1px 5px;border:1px solid var(--line);border-radius:4px;background:#f
 .assistant-disclosure[open] summary:before{content:"⌄ "}
 .assistant-disclosure .panel-note{font-size:10px;overflow-wrap:anywhere}
 @media(max-width:1050px){.assistant-shell{grid-template-columns:1fr}.assistant-chat{min-height:560px}.assistant-tool-list{grid-template-columns:1fr}}
-@media(max-width:760px){.assistant-conversations{max-height:230px}.chat-composer-actions{align-items:stretch;flex-direction:column}.chat-composer-note{max-width:none}.assistant-chat{min-height:0}}
+/* Below 760px the sidebar becomes a 61px bottom bar, so the launcher and the panel both have to clear it:
+   an icon the bar swallows is an icon that is not "on every page" (FR-11). */
+@media(max-width:760px){.assistant-conversations{max-height:230px}.assistant-chat{min-height:0}.jarvis-launcher{right:14px;bottom:calc(61px + 14px);width:48px;height:48px;font-size:18px}.jarvis-floating{right:8px;left:8px;bottom:calc(61px + 8px);width:auto;height:min(74vh,calc(100vh - 61px - 24px))}}

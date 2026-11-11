@@ -1,3 +1,10 @@
+// Before anything is required: CopilotKit sends usage telemetry unless these are set, and
+// src/assistant/copilotRuntime.js sets the same defaults — here as well because .env is loaded below,
+// after src/app is already in memory, so a value that only lives in .env arrives too late for anything
+// that reads it at require time. `??=` so an operator can still set either variable to turn it back on.
+process.env.COPILOTKIT_TELEMETRY_DISABLED ??= '1';
+process.env.DO_NOT_TRACK ??= '1';
+
 const fs = require('fs');
 const path = require('path');
 const { createApp } = require('./src/app');

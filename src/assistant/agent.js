@@ -15,7 +15,7 @@ const { createAgent } = require('langchain');
 const { createChatModel, sanitizeError } = require('./model');
 const { createReadOnlyGuard } = require('./readOnlyGuard');
 const { chatSystemPrompt } = require('./prompts');
-const { AssistantInputError } = require('./errors');
+const { AssistantInputError, ERROR_CODES } = require('./errors');
 
 // Model turns per question. Each turn may request tools, so this bounds the loop without
 // limiting how many records a single answer may read.
@@ -49,7 +49,7 @@ function createAssistant({ store, connection, history }) {
     } catch (error) {
       const failure = error?.message || 'The model endpoint is not usable.';
       const saved = history.addMessage({ conversationId: chatId, role: 'assistant', content: '', model: store.rawModelSettings().model, error: failure });
-      yield { type: 'error', message: failure, messageId: saved.id, conversationId: chatId };
+      yield { type: 'error', code: ERROR_CODES.modelNotConfigured, message: failure, messageId: saved.id, conversationId: chatId };
       return;
     }
 
@@ -58,7 +58,7 @@ function createAssistant({ store, connection, history }) {
       const failure = status.error || `The local Jarvis MCP endpoint at ${status.url} is not reachable.`;
       const message2 = `I could not read your records, so I will not guess at numbers. ${failure} Open Settings & backup → Assistant and turn the connection on or use Reconnect.`;
       const saved = history.addMessage({ conversationId: chatId, role: 'assistant', content: '', model: model.model, error: message2 });
-      yield { type: 'error', message: message2, messageId: saved.id, conversationId: chatId };
+      yield { type: 'error', code: ERROR_CODES.mcpUnreachable, message: message2, messageId: saved.id, conversationId: chatId };
       return;
     }
 
@@ -115,7 +115,21 @@ function createAssistant({ store, connection, history }) {
         model: model.model,
         error: content ? `Stopped: ${failure}` : failure,
       });
-      yield { type: 'error', message: failure, messageId: saved.id, conversationId: chatId, partial: content };
+      // An aborted run arrives here as well as through the `signal?.aborted` check in the loop above:
+      // LangChain rejects the stream when the signal fires mid-request, so the throw is the common case
+      // and the clean break the lucky one. Saying which this was is what lets the UI show "Stopped." for
+      // a Stop button instead of a failure the user is invited to act on — and on the AG-UI transport the
+      // runtime drops a stopped run's own terminal event, so a code is the only place the difference can
+      // survive (see the plan's risk 6).
+      yield {
+        type: 'error',
+        code: signal?.aborted ? ERROR_CODES.runStopped : ERROR_CODES.modelRequestFailed,
+        message: failure,
+        messageId: saved.id,
+        conversationId: chatId,
+        partial: content,
+        aborted: Boolean(signal?.aborted),
+      };
       return;
     }
 

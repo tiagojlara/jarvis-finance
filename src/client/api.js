@@ -20,49 +20,11 @@ export const api = async (path, options = {}) => {
 // /api/:table CRUD surface, so nothing here can touch a financial record.
 export const assistantApi = (path = '', options = {}) => api(`assistant/${path}`, options);
 
-// Reads the assistant's server-sent-events reply from a POST. The chat endpoint streams
-// `data: {...}` frames (user / delta / tool / notice / done / error) and the answer grows as
-// they arrive, which is why this is not `api()`: that one waits for a whole body.
-//
-// A JSON reply instead of a stream is the disclosure gate (HTTP 428) or a run-level failure;
-// both surface as a thrown Error carrying the server's own message so the UI can show it.
-export async function streamAssistant({ message, conversationId, onEvent, signal } = {}) {
-  const response = await fetch('/api/assistant/chat', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', Accept: 'text/event-stream' },
-    body: JSON.stringify({ message, conversationId }),
-    signal,
-  });
-  const contentType = response.headers.get('content-type') || '';
-  if (!response.ok || !contentType.includes('text/event-stream')) {
-    let detail = null;
-    try { detail = JSON.parse(await response.text()); } catch { /* no usable body */ }
-    throw new Error(detail?.error || `The assistant replied with an unexpected response (HTTP ${response.status}).`);
-  }
-  const reader = response.body.getReader();
-  const decoder = new TextDecoder();
-  let buffer = '';
-  const emit = (frame) => {
-    const payload = frame.split('\n')
-      .filter((line) => line.startsWith('data:'))
-      .map((line) => line.slice('data:'.length))
-      .join('');
-    if (!payload.trim()) return;
-    try { onEvent(JSON.parse(payload)); } catch { /* a frame we cannot parse is not an answer */ }
-  };
-  for (;;) {
-    const { done, value } = await reader.read();
-    if (done) break;
-    buffer += decoder.decode(value, { stream: true });
-    let boundary = buffer.indexOf('\n\n');
-    while (boundary !== -1) {
-      emit(buffer.slice(0, boundary));
-      buffer = buffer.slice(boundary + 2);
-      boundary = buffer.indexOf('\n\n');
-    }
-  }
-  if (buffer.trim()) emit(buffer);
-}
+// No streaming helper lives here any more. The assistant's answer arrives over the CopilotKit endpoint
+// (`/api/copilotkit`, components/JarvisChat.jsx), which owns its own transport and event folding; the
+// hand-rolled `POST /api/assistant/chat` reader that used to sit in this file was deleted with the route
+// it served. What the client still needs from this module is the plain JSON surface: conversations,
+// messages, disclosure, settings — `assistantApi` below.
 
 // Server stamps are UTC instants (history.js and the summary rows both normalise them), so
 // they need an explicit local rendering — a raw ISO string in the UI reads as a machine log.
